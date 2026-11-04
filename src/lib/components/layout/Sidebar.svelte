@@ -1,10 +1,13 @@
 <script>
 	import { page } from '$app/state';
+	import { users } from '$lib/stores/auth.js';
 
 	/** @type {{ dark?: boolean, ontoggletheme?: () => void, user?: { name?: string, role?: string } | null, onlogout?: () => void, mobileOpen?: boolean, onclose?: () => void }} */
 	let { dark = false, ontoggletheme = () => {}, user = null, onlogout = () => {}, mobileOpen = false, onclose = () => {} } = $props();
 	/** @type {HTMLDialogElement} */
 	let mobileDialog;
+
+	const pendingCount = $derived($users.filter((u) => u.status === 'menunggu').length);
 
 	$effect(() => {
 	if (mobileOpen && mobileDialog && !mobileDialog.open) mobileDialog.showModal();
@@ -59,13 +62,20 @@
 			<a
 				href={link.href}
 				onclick={onclose}
-				class="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors
+				class="flex items-center justify-between rounded-lg px-3 py-2.5 text-sm font-medium transition-colors
 					{page.url.pathname === link.href
 					? 'bg-brand-50 font-semibold text-brand-700'
 					: 'text-[var(--color-ink-700)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-ink-900)]'}"
 			>
-				<span class="text-base">{link.icon}</span>
-				{link.label}
+				<span class="flex items-center gap-3">
+					<span class="text-base">{link.icon}</span>
+					{link.label}
+				</span>
+				{#if link.href === '/pengguna' && pendingCount > 0}
+					<span class="grid h-5 min-w-5 place-items-center rounded-full bg-warning-500 px-1.5 text-[10px] font-extrabold text-white">
+						{pendingCount}
+					</span>
+				{/if}
 			</a>
 		{/each}
 	</nav>

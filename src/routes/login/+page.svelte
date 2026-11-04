@@ -3,26 +3,42 @@
 	import { page } from '$app/state';
 	import { fly, fade, scale } from 'svelte/transition';
 	import { quintOut } from 'svelte/easing';
-	import { session, login } from '$lib/stores/auth.js';
+	import { session, login, registerAccount } from '$lib/stores/auth.js';
 
+	let mode = $state('login'); // 'login' | 'register'
 	let identifier = $state('');
 	let password = $state('');
 	let showPw = $state(false);
 	let error = $state('');
+	let successMsg = $state('');
 	let loading = $state(false);
+
+	// Form registrasi mandiri
+	let reg = $state({
+		username: '',
+		name: '',
+		role: 'kasir',
+		email: '',
+		phone: '',
+		password: ''
+	});
+	let regShowPw = $state(false);
 
 	const redirect = $derived(page.url.searchParams.get('redirect') || '/');
 
 	function fillDemo(u, p) {
+		mode = 'login';
 		identifier = u;
 		password = p;
 		error = '';
+		successMsg = '';
 	}
 
 	async function submit(e) {
 		e.preventDefault();
 		if (loading) return;
 		error = '';
+		successMsg = '';
 		loading = true;
 		// Jeda kecil agar animasi loading sempat terlihat
 		await new Promise((r) => setTimeout(r, 450));
@@ -32,6 +48,32 @@
 			goto(redirect);
 		} else {
 			error = res.reason || 'Gagal masuk.';
+		}
+	}
+
+	async function submitRegister(e) {
+		e.preventDefault();
+		if (loading) return;
+		error = '';
+		successMsg = '';
+		loading = true;
+		await new Promise((r) => setTimeout(r, 450));
+		const res = registerAccount(reg);
+		loading = false;
+		if (res.ok) {
+			successMsg = `Permohonan akun "${reg.username.trim().toLowerCase()}" berhasil dikirim! Akun Anda sedang menunggu verifikasi/persetujuan dari pemilik toko sebelum dapat digunakan untuk masuk.`;
+			identifier = reg.username.trim().toLowerCase();
+			reg = {
+				username: '',
+				name: '',
+				role: 'kasir',
+				email: '',
+				phone: '',
+				password: ''
+			};
+			mode = 'login';
+		} else {
+			error = res.reason || 'Gagal mendaftar akun.';
 		}
 	}
 </script>
@@ -121,97 +163,306 @@
 				</div>
 			</div>
 
-			<h2 class="text-h1">Masuk ke aplikasi</h2>
-			<p class="text-body mt-1">Gunakan akun tokomu untuk mulai berjualan hari ini.</p>
+			<!-- Tab Pilihan: Masuk vs Buat Akun -->
+			<div
+				class="mt-4 flex rounded-xl border border-[var(--color-line)] bg-[var(--color-surface-2)] p-1"
+			>
+				<button
+					type="button"
+					class="flex-1 rounded-lg py-2 text-xs font-bold transition-all
+						{mode === 'login'
+						? 'text-brand-700 bg-[var(--color-surface-0)] shadow-xs'
+						: 'text-[var(--color-ink-500)] hover:text-[var(--color-ink-900)]'}"
+					onclick={() => {
+						mode = 'login';
+						error = '';
+						successMsg = '';
+					}}
+				>
+					🔑 Masuk Akun
+				</button>
+				<button
+					type="button"
+					class="flex-1 rounded-lg py-2 text-xs font-bold transition-all
+						{mode === 'register'
+						? 'text-brand-700 bg-[var(--color-surface-0)] shadow-xs'
+						: 'text-[var(--color-ink-500)] hover:text-[var(--color-ink-900)]'}"
+					onclick={() => {
+						mode = 'register';
+						error = '';
+						successMsg = '';
+					}}
+				>
+					➕ Buat Akun Baru
+				</button>
+			</div>
 
-			<form class="card mt-6 space-y-4 p-6" onsubmit={submit}>
-				<div>
-					<label
-						class="text-caption mb-1.5 block font-bold tracking-wide uppercase"
-						for="identifier">Username / Email / No. HP</label
-					>
-					<input
-						id="identifier"
-						type="text"
-						autocomplete="username"
-						placeholder="cth: admin / admin@email.id / 0812…"
-						class="border-ink-300 bg-surface placeholder:text-ink-400 focus:border-brand-500 focus:ring-brand-100 w-full rounded-lg border px-4 py-2.5 text-sm transition-colors outline-none focus:ring-2"
-						bind:value={identifier}
-					/>
-				</div>
-
-				<div>
-					<label class="text-caption mb-1.5 block font-bold tracking-wide uppercase" for="password"
-						>Password</label
-					>
-					<div class="relative">
-						<input
-							id="password"
-							type={showPw ? 'text' : 'password'}
-							autocomplete="current-password"
-							placeholder="••••••••"
-							class="border-ink-300 bg-surface placeholder:text-ink-400 focus:border-brand-500 focus:ring-brand-100 w-full rounded-lg border px-4 py-2.5 pr-12 text-sm transition-colors outline-none focus:ring-2"
-							bind:value={password}
-						/>
-						<button
-							type="button"
-							class="text-ink-400 hover:text-ink-700 absolute inset-y-0 right-0 px-3.5 text-sm transition-colors"
-							onclick={() => (showPw = !showPw)}
-							aria-label={showPw ? 'Sembunyikan password' : 'Tampilkan password'}
+			{#if successMsg}
+				<div
+					class="border-success-200 bg-success-50 text-success-800 mt-4 rounded-xl border p-4 text-xs font-medium"
+					in:fly={{ y: -8, duration: 250 }}
+				>
+					<p class="text-success-900 font-bold">✅ Permohonan Terkirim!</p>
+					<p class="mt-1 leading-relaxed">{successMsg}</p>
+					<p class="text-success-700 mt-2 text-[11px]">
+						💡 <i
+							>Admin/pemilik toko dapat langsung menyetujui akun Anda di menu <b>Kelola Pengguna</b
+							>.</i
 						>
-							{showPw ? '🙈' : '👁'}
+					</p>
+				</div>
+			{/if}
+
+			{#if mode === 'login'}
+				<h2 class="text-h1 mt-6">Masuk ke aplikasi</h2>
+				<p class="text-body mt-1">Gunakan akun tokomu untuk mulai berjualan hari ini.</p>
+
+				<form class="card mt-6 space-y-4 p-6" onsubmit={submit}>
+					<div>
+						<label
+							class="text-caption mb-1.5 block font-bold tracking-wide uppercase"
+							for="identifier">Username / Email / No. HP</label
+						>
+						<input
+							id="identifier"
+							type="text"
+							autocomplete="username"
+							placeholder="cth: admin / admin@email.id / 0812…"
+							class="border-ink-300 bg-surface placeholder:text-ink-400 focus:border-brand-500 focus:ring-brand-100 w-full rounded-lg border px-4 py-2.5 text-sm transition-colors outline-none focus:ring-2"
+							bind:value={identifier}
+						/>
+					</div>
+
+					<div>
+						<label
+							class="text-caption mb-1.5 block font-bold tracking-wide uppercase"
+							for="password">Password</label
+						>
+						<div class="relative">
+							<input
+								id="password"
+								type={showPw ? 'text' : 'password'}
+								autocomplete="current-password"
+								placeholder="••••••••"
+								class="border-ink-300 bg-surface placeholder:text-ink-400 focus:border-brand-500 focus:ring-brand-100 w-full rounded-lg border px-4 py-2.5 pr-12 text-sm transition-colors outline-none focus:ring-2"
+								bind:value={password}
+							/>
+							<button
+								type="button"
+								class="text-ink-400 hover:text-ink-700 absolute inset-y-0 right-0 px-3.5 text-sm transition-colors"
+								onclick={() => (showPw = !showPw)}
+								aria-label={showPw ? 'Sembunyikan password' : 'Tampilkan password'}
+							>
+								{showPw ? '🙈' : '👁'}
+							</button>
+						</div>
+					</div>
+
+					{#if error}
+						{#key error}
+							<p
+								class="border-danger-200 bg-danger-50 text-danger-700 rounded-lg border px-3.5 py-2.5 text-xs font-semibold"
+								in:fly={{ x: -12, duration: 250 }}
+							>
+								⚠️ {error}
+							</p>
+						{/key}
+					{/if}
+
+					<button
+						type="submit"
+						disabled={loading}
+						class="btn-press bg-brand-600 flex w-full items-center justify-center gap-2 rounded-lg py-3 text-sm font-bold text-white disabled:cursor-wait disabled:opacity-70"
+					>
+						{#if loading}
+							<span
+								class="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white"
+							></span>
+							Memeriksa…
+						{:else}
+							Masuk →
+						{/if}
+					</button>
+				</form>
+
+				<!-- Akun demo: klik untuk isi otomatis -->
+				<div class="mt-5">
+					<p class="text-caption mb-2 text-center">Coba langsung — klik salah satu akun demo:</p>
+					<div class="grid grid-cols-2 gap-3">
+						<button
+							class="btn-press card hover:border-brand-300 p-3.5 text-left transition-colors"
+							onclick={() => fillDemo('admin', 'admin123')}
+						>
+							<p class="text-ink-800 text-sm font-bold">👑 Pemilik</p>
+							<p class="text-caption mt-0.5 font-mono">admin / admin123</p>
+							<p class="text-caption text-success-600 mt-1">Akses semua halaman</p>
+						</button>
+						<button
+							class="btn-press card hover:border-brand-300 p-3.5 text-left transition-colors"
+							onclick={() => fillDemo('kasir', 'kasir123')}
+						>
+							<p class="text-ink-800 text-sm font-bold">🧾 Kasir</p>
+							<p class="text-caption mt-0.5 font-mono">kasir / kasir123</p>
+							<p class="text-caption text-warning-600 mt-1">Tanpa halaman laporan</p>
 						</button>
 					</div>
 				</div>
+			{:else}
+				<!-- Mode Buat Akun Sendiri (Perlu Persetujuan Pembuat/Pemilik) -->
+				<h2 class="text-h1 mt-6">Daftar Akun Baru</h2>
+				<p class="text-body mt-1">
+					Buat akun tokomu sendiri. Akun baru akan masuk ke antrean verifikasi pengawasan pembuat
+					aplikasi / pemilik.
+				</p>
 
-				{#if error}
-					{#key error}
-						<p
-							class="border-danger-200 bg-danger-50 text-danger-700 rounded-lg border px-3.5 py-2.5 text-xs font-semibold"
-							in:fly={{ x: -12, duration: 250 }}
+				<form class="card mt-6 space-y-4 p-6" onsubmit={submitRegister}>
+					<div class="border-brand-200 bg-brand-50 text-brand-800 rounded-lg border p-3 text-xs">
+						🛡️ <b>Mode Pengawasan:</b> Setiap akun yang didaftarkan mandiri berstatus
+						<i>Menunggu Persetujuan</i> sampai dikonfirmasi oleh pemilik toko.
+					</div>
+
+					<div>
+						<label
+							class="text-caption mb-1.5 block font-bold tracking-wide uppercase"
+							for="reg-username">Username *</label
 						>
-							⚠️ {error}
-						</p>
-					{/key}
-				{/if}
+						<input
+							id="reg-username"
+							type="text"
+							required
+							placeholder="cth: kasir_budi (3-20 huruf/angka)"
+							class="border-ink-300 bg-surface placeholder:text-ink-400 focus:border-brand-500 focus:ring-brand-100 w-full rounded-lg border px-4 py-2.5 text-sm transition-colors outline-none focus:ring-2"
+							bind:value={reg.username}
+						/>
+					</div>
 
-				<button
-					type="submit"
-					disabled={loading}
-					class="btn-press bg-brand-600 flex w-full items-center justify-center gap-2 rounded-lg py-3 text-sm font-bold text-white disabled:cursor-wait disabled:opacity-70"
-				>
-					{#if loading}
-						<span class="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white"
-						></span>
-						Memeriksa…
-					{:else}
-						Masuk →
+					<div>
+						<label
+							class="text-caption mb-1.5 block font-bold tracking-wide uppercase"
+							for="reg-name">Nama Lengkap *</label
+						>
+						<input
+							id="reg-name"
+							type="text"
+							required
+							placeholder="cth: Budi Setiawan"
+							class="border-ink-300 bg-surface placeholder:text-ink-400 focus:border-brand-500 focus:ring-brand-100 w-full rounded-lg border px-4 py-2.5 text-sm transition-colors outline-none focus:ring-2"
+							bind:value={reg.name}
+						/>
+					</div>
+
+					<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+						<div>
+							<label
+								class="text-caption mb-1.5 block font-bold tracking-wide uppercase"
+								for="reg-email">Email (opsional)</label
+							>
+							<input
+								id="reg-email"
+								type="email"
+								placeholder="nama@email.id"
+								class="border-ink-300 bg-surface placeholder:text-ink-400 focus:border-brand-500 focus:ring-brand-100 w-full rounded-lg border px-4 py-2.5 text-sm transition-colors outline-none focus:ring-2"
+								bind:value={reg.email}
+							/>
+						</div>
+						<div>
+							<label
+								class="text-caption mb-1.5 block font-bold tracking-wide uppercase"
+								for="reg-phone">No. HP (opsional)</label
+							>
+							<input
+								id="reg-phone"
+								type="tel"
+								placeholder="0812…"
+								class="border-ink-300 bg-surface placeholder:text-ink-400 focus:border-brand-500 focus:ring-brand-100 w-full rounded-lg border px-4 py-2.5 text-sm transition-colors outline-none focus:ring-2"
+								bind:value={reg.phone}
+							/>
+						</div>
+					</div>
+
+					<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+						<div>
+							<label
+								class="text-caption mb-1.5 block font-bold tracking-wide uppercase"
+								for="reg-role">Peran Akun</label
+							>
+							<select
+								id="reg-role"
+								class="border-ink-300 bg-surface focus:border-brand-500 w-full rounded-lg border px-3 py-2.5 text-sm outline-none"
+								bind:value={reg.role}
+							>
+								<option value="kasir">🧾 Kasir (POS)</option>
+								<option value="pemilik">👑 Pemilik Toko</option>
+							</select>
+						</div>
+						<div>
+							<label
+								class="text-caption mb-1.5 block font-bold tracking-wide uppercase"
+								for="reg-pass">Password *</label
+							>
+							<div class="relative">
+								<input
+									id="reg-pass"
+									type={regShowPw ? 'text' : 'password'}
+									minlength="6"
+									required
+									placeholder="min. 6 karakter"
+									class="border-ink-300 bg-surface placeholder:text-ink-400 focus:border-brand-500 focus:ring-brand-100 w-full rounded-lg border px-4 py-2.5 pr-10 text-sm transition-colors outline-none focus:ring-2"
+									bind:value={reg.password}
+								/>
+								<button
+									type="button"
+									class="text-ink-400 hover:text-ink-700 absolute inset-y-0 right-0 px-3 text-sm transition-colors"
+									onclick={() => (regShowPw = !regShowPw)}
+									aria-label={regShowPw ? 'Sembunyikan password' : 'Tampilkan password'}
+								>
+									{regShowPw ? '🙈' : '👁'}
+								</button>
+							</div>
+						</div>
+					</div>
+
+					{#if error}
+						{#key error}
+							<p
+								class="border-danger-200 bg-danger-50 text-danger-700 rounded-lg border px-3.5 py-2.5 text-xs font-semibold"
+								in:fly={{ x: -12, duration: 250 }}
+							>
+								⚠️ {error}
+							</p>
+						{/key}
 					{/if}
-				</button>
-			</form>
 
-			<!-- Akun demo: klik untuk isi otomatis -->
-			<div class="mt-5">
-				<p class="text-caption mb-2 text-center">Coba langsung — klik salah satu akun demo:</p>
-				<div class="grid grid-cols-2 gap-3">
 					<button
-						class="btn-press card hover:border-brand-300 p-3.5 text-left transition-colors"
-						onclick={() => fillDemo('admin', 'admin123')}
+						type="submit"
+						disabled={loading}
+						class="btn-press bg-brand-600 flex w-full items-center justify-center gap-2 rounded-lg py-3 text-sm font-bold text-white disabled:cursor-wait disabled:opacity-70"
 					>
-						<p class="text-ink-800 text-sm font-bold">👑 Pemilik</p>
-						<p class="text-caption mt-0.5 font-mono">admin / admin123</p>
-						<p class="text-caption text-success-600 mt-1">Akses semua halaman</p>
+						{#if loading}
+							<span
+								class="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white"
+							></span>
+							Mendaftarkan…
+						{:else}
+							Ajukan Pendaftaran Akun →
+						{/if}
 					</button>
-					<button
-						class="btn-press card hover:border-brand-300 p-3.5 text-left transition-colors"
-						onclick={() => fillDemo('kasir', 'kasir123')}
-					>
-						<p class="text-ink-800 text-sm font-bold">🧾 Kasir</p>
-						<p class="text-caption mt-0.5 font-mono">kasir / kasir123</p>
-						<p class="text-caption text-warning-600 mt-1">Tanpa halaman laporan</p>
-					</button>
-				</div>
-			</div>
+
+					<p class="text-caption text-center">
+						Sudah punya akun?
+						<button
+							type="button"
+							class="text-brand-600 font-bold hover:underline"
+							onclick={() => {
+								mode = 'login';
+								error = '';
+							}}
+						>
+							Masuk di sini
+						</button>
+					</p>
+				</form>
+			{/if}
 		</div>
 	</div>
 </div>

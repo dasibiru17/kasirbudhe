@@ -76,7 +76,7 @@ export function normPhone(v) {
 }
 
 /** Akun bawaan — dibuat otomatis saat pertama dibuka. */
-/** @type {Array<{ username:string, name:string, role:'pemilik'|'kasir', email:string, phone:string, passwordHash:string }>} */
+/** @type {Array<{ username:string, name:string, role:'pemilik'|'kasir', email:string, phone:string, passwordHash:string, status?:'aktif'|'menunggu'|'ditolak', createdAt?:string }>} */
 const DEFAULT_USERS = [
 	{
 		username: 'admin',
@@ -84,7 +84,8 @@ const DEFAULT_USERS = [
 		role: 'pemilik',
 		email: 'admin@tokosejahtera.id',
 		phone: '081234567890',
-		passwordHash: hashPassword('admin123')
+		passwordHash: hashPassword('admin123'),
+		status: 'aktif'
 	},
 	{
 		username: 'kasir',
@@ -92,16 +93,17 @@ const DEFAULT_USERS = [
 		role: 'kasir',
 		email: '',
 		phone: '',
-		passwordHash: hashPassword('kasir123')
+		passwordHash: hashPassword('kasir123'),
+		status: 'aktif'
 	}
 ];
 
 /**
- * @type {import('svelte/store').Writable<Array<{ username:string, name:string, role:'pemilik'|'kasir', email:string, phone:string, passwordHash:string }>>}
+ * @type {import('svelte/store').Writable<Array<{ username:string, name:string, role:'pemilik'|'kasir', email:string, phone:string, passwordHash:string, status?:'aktif'|'menunggu'|'ditolak', createdAt?:string }>>}
  */
 export const users = persisted('users', DEFAULT_USERS);
 
-// Migrasi: pastikan akun bawaan ada + semua user punya field email/phone
+// Migrasi: pastikan akun bawaan ada + semua user punya field email/phone/status
 if (browser) {
 	users.update((list) => {
 		const arr = Array.isArray(list) ? [...list] : [];
@@ -115,18 +117,21 @@ if (browser) {
 					phone: '',
 					...arr[i],
 					username: arr[i].username,
-					role: arr[i].role === 'kasir' ? 'kasir' : 'pemilik'
+					role: arr[i].role === 'kasir' ? 'kasir' : 'pemilik',
+					status: arr[i].status || 'aktif'
 				};
 			}
 		}
-		// Normalisasi semua entri lama yang mungkin belum punya email/phone
+		// Normalisasi semua entri lama yang mungkin belum punya email/phone/status
 		return arr.map((u) => ({
 			username: String(u.username ?? ''),
 			name: String(u.name ?? u.username ?? ''),
 			role: u.role === 'kasir' ? 'kasir' : 'pemilik',
 			email: normEmail(u.email),
 			phone: normPhone(u.phone),
-			passwordHash: String(u.passwordHash ?? '')
+			passwordHash: String(u.passwordHash ?? ''),
+			status: u.status === 'menunggu' || u.status === 'ditolak' ? u.status : 'aktif',
+			createdAt: u.createdAt || new Date().toISOString()
 		}));
 	});
 }
@@ -160,6 +165,18 @@ export function login(identifier, password) {
 	const found = findUser(identifier);
 	if (!found || found.passwordHash !== hashPassword(password)) {
 		return { ok: false, reason: 'Akun atau password salah. Coba lagi.' };
+	}
+	if (found.status === 'menunggu') {
+		return {
+			ok: false,
+			reason: 'Akun Anda sedang dalam peninjauan pembuat aplikasi / pemilik toko. Harap tunggu persetujuan.'
+		};
+	}
+	if (found.status === 'ditolak') {
+		return {
+			ok: false,
+			reason: 'Pendaftaran akun Anda ditolak oleh pemilik toko.'
+		};
 	}
 	session.set({
 		username: found.username,
@@ -286,4 +303,84 @@ export function removeUser(username) {
 		return next;
 	});
 	return removed ? { ok: true } : { ok: false, reason: 'Pengguna tidak ditemukan.' };
+}
+
+/**
+ * Pendaftaran akun mandiri dari halaman login.
+ * Status otomatis 'menunggu' agar ditinjau/diawasi oleh pemilik/pembuat aplikasi.
+ * @param {{ username:string, name:string, role?:string, email?:string, phone?:string, password:string }} data
+ * @returns {{ ok:boolean, reason?:string }}
+ */
+export function registerAccount(data) {
+	const username = normUsername(data.username);
+	const name = String(data.name ?? '').trim();
+	const role = data.role === 'pemilik' ? 'pemilik' : 'kasir';
+	const email = normEmail(data.email);
+	const phone = normPhone(data.phone);
+	const password = String(data.password ?? '');
+
+	if (!username) return { ok: false, reason: 'Username wajib diisi.' };
+	if (!/^[a-z0-9._-]{3,20}$/.test(username))
+		return { ok: false, reason: 'Username 3–20 karakter (huruf/angka/titik/_/-).' };
+	if (!name) return { ok: false, reason: 'Nama lengkap wajib diisi.' };
+	if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
+		return { ok: false, reason: 'Format email tidak valid.' };
+	if (phone && (phone.length < 9 || phone.length > 15))
+		return { ok: false, reason: 'No. HP tidak valid (9–15 digit).' };
+	if (password.length < 6) return { ok: false, reason: 'Password minimal 6 karakter.' };
+
+	const list = get(users);
+	if (list.some((u) => normUsername(u.username) === username))
+		return { ok: false, reason: `Username "${username}" sudah dipakai.` };
+	if (email && list.some((u) => u.email && normEmail(u.email) === email))
+		return { ok: false, reason: `Email "${email}" sudah terdaftar.` };
+	if (phone && list.some((u) => u.phone && normPhone(u.phone) === phone))
+		return { ok: false, reason: `No. HP "${phone}" sudah terdaftar.` };
+
+	users.update((arr) => [
+		...arr,
+		{
+			username,
+			name,
+			role,
+			email,
+			phone,
+			passwordHash: hashPassword(password),
+			status: 'menunggu',
+			createdAt: new Date().toISOString()
+		}
+	]);
+	return { ok: true };
+}
+
+/** Setujui / terima akun baru yang mendaftar */
+export function approveUser(username) {
+	const key = normUsername(username);
+	let found = false;
+	users.update((arr) =>
+		arr.map((u) => {
+			if (normUsername(u.username) === key) {
+				found = true;
+				return { ...u, status: 'aktif' };
+			}
+			return u;
+		})
+	);
+	return found ? { ok: true } : { ok: false, reason: 'Pengguna tidak ditemukan.' };
+}
+
+/** Tolak akun baru yang mendaftar */
+export function rejectUser(username) {
+	const key = normUsername(username);
+	let found = false;
+	users.update((arr) =>
+		arr.map((u) => {
+			if (normUsername(u.username) === key) {
+				found = true;
+				return { ...u, status: 'ditolak' };
+			}
+			return u;
+		})
+	);
+	return found ? { ok: true } : { ok: false, reason: 'Pengguna tidak ditemukan.' };
 }

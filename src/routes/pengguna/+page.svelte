@@ -6,11 +6,16 @@
 		addUser,
 		updateUser,
 		resetPassword,
-		removeUser
+		removeUser,
+		approveUser,
+		rejectUser
 	} from '$lib/stores/auth.js';
 
 	// Hanya pemilik yang boleh buka halaman ini (dijaga juga oleh layout)
 	const isOwner = $derived($session?.role !== 'kasir');
+
+	const pendingUsers = $derived($users.filter((u) => u.status === 'menunggu'));
+	const activeUsers = $derived($users.filter((u) => u.status !== 'menunggu'));
 
 	// ---------- Form tambah user ----------
 	let fu = $state({ username: '', name: '', role: 'kasir', email: '', phone: '', password: '' });
@@ -130,6 +135,82 @@
 			>
 				{msg.text}
 			</p>
+		{/if}
+
+		<!-- ============ SECTION PENGAWASAN: PERMOHONAN AKUN BARU ============ -->
+		{#if pendingUsers.length > 0}
+			<div class="mt-6 rounded-2xl border-2 border-warning-300 bg-warning-50/70 p-5 shadow-sm">
+				<div class="flex items-center justify-between gap-3">
+					<div>
+						<h2 class="text-h3 flex items-center gap-2 text-warning-900">
+							<span class="grid h-6 w-6 place-items-center rounded-full bg-warning-500 text-xs font-bold text-white">
+								{pendingUsers.length}
+							</span>
+							Permohonan Akun Baru (Menunggu Pengawasan)
+						</h2>
+						<p class="text-caption mt-1 text-warning-700">
+							Pengguna berikut mendaftar secara mandiri melalui menu login dan memerlukan persetujuan pemilik sebelum bisa masuk.
+						</p>
+					</div>
+				</div>
+
+				<ul class="mt-4 divide-y divide-warning-200 rounded-xl border border-warning-200 bg-surface">
+					{#each pendingUsers as pu (pu.username)}
+						<li class="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+							<div class="flex items-center gap-3">
+								<div class="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-warning-500 text-sm font-bold text-white">
+									{(pu.name || pu.username).trim().charAt(0).toUpperCase()}
+								</div>
+								<div>
+									<p class="text-sm font-bold text-ink-800">
+										{pu.name}
+										<span class="ml-1 rounded-full bg-warning-100 px-2 py-0.5 text-[10px] font-bold text-warning-800">
+											{pu.role === 'kasir' ? '🧾 Kasir' : '👑 Pemilik'}
+										</span>
+										<span class="ml-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800">
+											⏳ Menunggu Persetujuan
+										</span>
+									</p>
+									<p class="text-caption mt-0.5 font-mono">
+										@{pu.username}{pu.email ? ` · ✉️ ${pu.email}` : ''}{pu.phone ? ` · 📱 ${pu.phone}` : ''}
+									</p>
+								</div>
+							</div>
+
+							<div class="flex items-center gap-2 self-end sm:self-auto">
+								<button
+									type="button"
+									class="btn-press rounded-lg bg-success-600 px-3.5 py-1.5 text-xs font-bold text-white transition-colors hover:bg-success-700"
+									onclick={() => {
+										approveUser(pu.username);
+										notify('ok', `✅ Akun "${pu.username}" berhasil disetujui dan kini aktif!`);
+									}}
+								>
+									✓ Setujui & Aktifkan
+								</button>
+								<button
+									type="button"
+									class="rounded-lg border border-danger-200 px-3.5 py-1.5 text-xs font-semibold text-danger-600 transition-colors hover:bg-danger-50"
+									onclick={() => {
+										rejectUser(pu.username);
+										notify('err', `🚫 Permohonan akun "${pu.username}" ditolak.`);
+									}}
+								>
+									✕ Tolak
+								</button>
+								<button
+									type="button"
+									class="rounded-lg border border-line px-2.5 py-1.5 text-xs text-ink-400 hover:text-danger-600"
+									title="Hapus permohonan"
+									onclick={() => hapus(pu.username, pu.name)}
+								>
+									🗑
+								</button>
+							</div>
+						</li>
+					{/each}
+				</ul>
+			</div>
 		{/if}
 
 		<div class="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-3">
@@ -262,6 +343,11 @@
 												class="bg-success-100 text-success-700 rounded-full px-2 py-0.5 text-[11px] font-bold"
 												>● sedang login</span
 											>
+										{/if}
+										{#if u.status === 'ditolak'}
+											<span class="rounded-full bg-danger-100 px-2 py-0.5 text-[11px] font-bold text-danger-700">
+												✕ ditolak
+											</span>
 										{/if}
 									</p>
 									<p class="text-caption mt-0.5 font-mono">
