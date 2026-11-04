@@ -38,7 +38,7 @@
 	});
 
 	function keluar() {
-		logout();
+		void logout();
 		goto('/login');
 	}
 </script>
@@ -47,7 +47,14 @@
 	{@render children()}
 {:else if $session}
 	<div class="min-h-screen bg-[var(--color-surface-1)] font-sans">
-		<Sidebar {dark} ontoggletheme={() => (dark = !dark)} user={$session} onlogout={keluar} mobileOpen={mobileMenuOpen} onclose={() => (mobileMenuOpen = false)} />
+		<Sidebar
+			{dark}
+			ontoggletheme={() => (dark = !dark)}
+			user={$session}
+			onlogout={keluar}
+			mobileOpen={mobileMenuOpen}
+			onclose={() => (mobileMenuOpen = false)}
+		/>
 
 		<!-- Bar atas untuk mobile -->
 		<header
@@ -55,7 +62,7 @@
 		>
 			<button
 				type="button"
-				class="flex h-10 items-center gap-2 rounded-xl border border-[var(--color-line)] bg-[var(--color-surface-2)] px-2.5 text-xs font-bold text-[var(--color-ink-900)] shadow-xs transition-colors hover:bg-brand-50 hover:text-brand-700 active:scale-95"
+				class="hover:bg-brand-50 hover:text-brand-700 flex h-10 items-center gap-2 rounded-xl border border-[var(--color-line)] bg-[var(--color-surface-2)] px-2.5 text-xs font-bold text-[var(--color-ink-900)] shadow-xs transition-colors active:scale-95"
 				onclick={() => (mobileMenuOpen = true)}
 				aria-label="Buka Menu Navigasi"
 			>
@@ -63,17 +70,21 @@
 				<span>Menu</span>
 			</button>
 			<div
-				class="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-brand-600 text-sm font-bold text-white shadow-xs"
+				class="bg-brand-600 grid h-8 w-8 shrink-0 place-items-center rounded-lg text-sm font-bold text-white shadow-xs"
 			>
 				K
 			</div>
 			<div class="min-w-0 flex-1">
-				<p class="truncate text-xs font-bold text-[var(--color-ink-900)] sm:text-sm">Toko Sejahtera</p>
-				<p class="truncate text-[10px] text-[var(--color-ink-400)] sm:text-xs">Mini POS & Bookkeeping</p>
+				<p class="truncate text-xs font-bold text-[var(--color-ink-900)] sm:text-sm">
+					Toko Sejahtera
+				</p>
+				<p class="truncate text-[10px] text-[var(--color-ink-400)] sm:text-xs">
+					Mini POS & Bookkeeping
+				</p>
 			</div>
 			<button
 				type="button"
-				class="shrink-0 rounded-lg border border-[var(--color-line)] px-2.5 py-1.5 text-xs font-semibold text-[var(--color-ink-700)] transition-colors hover:bg-danger-50 hover:text-danger-600"
+				class="hover:bg-danger-50 hover:text-danger-600 shrink-0 rounded-lg border border-[var(--color-line)] px-2.5 py-1.5 text-xs font-semibold text-[var(--color-ink-700)] transition-colors"
 				onclick={keluar}
 				aria-label="Keluar"
 			>
@@ -89,7 +100,9 @@
 			<a
 				href="/"
 				class="flex flex-col items-center gap-0.5 px-3 py-1 text-[11px] font-semibold transition-colors
-					{page.url.pathname === '/' ? 'text-brand-600 font-bold' : 'text-[var(--color-ink-500)] hover:text-[var(--color-ink-900)]'}"
+					{page.url.pathname === '/'
+					? 'text-brand-600 font-bold'
+					: 'text-[var(--color-ink-500)] hover:text-[var(--color-ink-900)]'}"
 			>
 				<span class="text-base leading-none">📊</span>
 				<span>Dashboard</span>
@@ -97,7 +110,9 @@
 			<a
 				href="/kasir"
 				class="flex flex-col items-center gap-0.5 px-3 py-1 text-[11px] font-semibold transition-colors
-					{page.url.pathname === '/kasir' ? 'text-brand-600 font-bold' : 'text-[var(--color-ink-500)] hover:text-[var(--color-ink-900)]'}"
+					{page.url.pathname === '/kasir'
+					? 'text-brand-600 font-bold'
+					: 'text-[var(--color-ink-500)] hover:text-[var(--color-ink-900)]'}"
 			>
 				<span class="text-base leading-none">🛒</span>
 				<span>Kasir</span>
@@ -105,14 +120,16 @@
 			<a
 				href="/produk"
 				class="flex flex-col items-center gap-0.5 px-3 py-1 text-[11px] font-semibold transition-colors
-					{page.url.pathname === '/produk' ? 'text-brand-600 font-bold' : 'text-[var(--color-ink-500)] hover:text-[var(--color-ink-900)]'}"
+					{page.url.pathname === '/produk'
+					? 'text-brand-600 font-bold'
+					: 'text-[var(--color-ink-500)] hover:text-[var(--color-ink-900)]'}"
 			>
 				<span class="text-base leading-none">📦</span>
 				<span>Produk</span>
 			</a>
 			<button
 				type="button"
-				class="flex flex-col items-center gap-0.5 px-3 py-1 text-[11px] font-semibold text-[var(--color-ink-500)] transition-colors hover:text-brand-600"
+				class="hover:text-brand-600 flex flex-col items-center gap-0.5 px-3 py-1 text-[11px] font-semibold text-[var(--color-ink-500)] transition-colors"
 				onclick={() => (mobileMenuOpen = true)}
 			>
 				<span class="text-base leading-none">☰</span>

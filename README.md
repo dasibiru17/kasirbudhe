@@ -107,6 +107,39 @@ Saat pertama dibuka, aplikasi mengisi 8 produk contoh (sembako, minuman, makanan
 perawatan) agar langsung bisa dicoba. Untuk mengosongkan, hapus key
 `pos-kasir:products` di DevTools → Application → Local Storage.
 
+## Database Cloud (Supabase) — Versi Aman
+
+Aplikasi bisa berjalan tanpa cloud (localStorage), tetapi untuk sinkronisasi HP ↔ laptop
+jalankan **`supabase-schema-secure.sql`** di Supabase SQL Editor. Skema ini memakai
+**Supabase Auth + Row Level Security**, jadi password tidak lagi disimpan di tabel publik
+(`password_hash` dihapus) dan siapa pun yang tahu kunci _publishable_ tidak bisa
+membaca/menghapus data toko.
+
+Langkah setup:
+
+1. Supabase Dashboard → **SQL Editor** → tempel seluruh isi `supabase-schema-secure.sql` → **Run**.
+2. **Authentication → Sign In / Providers → Email**: matikan _Confirm email_ (opsional) agar
+   pendaftaran langsung aktif.
+3. Buka aplikasi → tab **Buat Akun Baru** → daftarkan akun **pemilik pertama**.
+   Pendaftar pertama otomatis menjadi `pemilik` dan status `aktif`; pendaftar berikutnya
+   menjadi `kasir` dengan status `menunggu` sampai disetujui di menu **Kelola Pengguna**.
+4. Login memakai **email + password** (diverifikasi Supabase Auth di server).
+
+Konfigurasi kunci di `src/lib/supabase.js` (atau `.env` dengan `VITE_SUPABASE_URL` dan
+`VITE_SUPABASE_ANON_KEY`). Jangan pernah memakai key `sb_secret_...` / `service_role` di frontend.
+
+### Ringkasan aturan RLS
+
+| Tabel          | Pemilik                    | Kasir                                                       |
+| -------------- | -------------------------- | ----------------------------------------------------------- |
+| `users`        | baca/ubah/hapus semua akun | hanya profilnya sendiri (role/status terkunci oleh trigger) |
+| `products`     | CRUD penuh                 | baca + update **stok** saja                                 |
+| `transactions` | baca semua, ubah/hapus     | baca + insert saat transaksi                                |
+| `expenses`     | CRUD penuh                 | baca saja                                                   |
+
+> Reset password akun lain dilakukan oleh pemilik lewat Dashboard Supabase
+> (**Authentication → Users**), karena butuh hak server yang tidak boleh ada di browser.
+
 ## Menjalankan QA (opsional)
 
 ```bash

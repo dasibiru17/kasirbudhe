@@ -1,5 +1,12 @@
 // File: pos-kasir/qa.mjs — QA end-to-end alur kasir → laporan → stok
 export default async function run(page, ui) {
+	// 0. Login menggunakan akun lokal (tanpa database)
+	await page.goto('http://localhost:5174/login', { waitUntil: 'networkidle' });
+	await page.locator('button:has-text("Pemilik")').first().click();
+	await page.locator('button:has-text("Masuk →")').click();
+	await page.waitForURL('http://localhost:5174/', { timeout: 5000 });
+	await page.waitForTimeout(300);
+
 	// 1. Dashboard
 	await page.goto('http://localhost:5174/', { waitUntil: 'networkidle' });
 	const dashboard = await page.evaluate(() => document.body.innerText.slice(0, 400));

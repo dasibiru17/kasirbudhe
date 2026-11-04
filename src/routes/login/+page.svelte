@@ -41,8 +41,8 @@
 		successMsg = '';
 		loading = true;
 		// Jeda kecil agar animasi loading sempat terlihat
-		await new Promise((r) => setTimeout(r, 450));
-		const res = login(identifier, password);
+		await new Promise((r) => setTimeout(r, 300));
+		const res = await login(identifier, password);
 		loading = false;
 		if (res.ok) {
 			goto(redirect);
@@ -57,8 +57,8 @@
 		error = '';
 		successMsg = '';
 		loading = true;
-		await new Promise((r) => setTimeout(r, 450));
-		const res = registerAccount(reg);
+		await new Promise((r) => setTimeout(r, 300));
+		const res = await registerAccount(reg);
 		loading = false;
 		if (res.ok) {
 			successMsg = `Permohonan akun "${reg.username.trim().toLowerCase()}" berhasil dikirim! Akun Anda sedang menunggu verifikasi/persetujuan dari pemilik toko sebelum dapat digunakan untuk masuk.`;
@@ -215,7 +215,7 @@
 
 			{#if mode === 'login'}
 				<h2 class="text-h1 mt-6">Masuk ke aplikasi</h2>
-				<p class="text-body mt-1">Gunakan akun tokomu untuk mulai berjualan hari ini.</p>
+				<p class="text-body mt-1">Masuk dengan username, email, atau no. HP dan password tokomu.</p>
 
 				<form class="card mt-6 space-y-4 p-6" onsubmit={submit}>
 					<div>
@@ -227,7 +227,7 @@
 							id="identifier"
 							type="text"
 							autocomplete="username"
-							placeholder="cth: admin / admin@email.id / 0812…"
+							placeholder="cth: admin atau admin@tokosejahtera.id"
 							class="border-ink-300 bg-surface placeholder:text-ink-400 focus:border-brand-500 focus:ring-brand-100 w-full rounded-lg border px-4 py-2.5 text-sm transition-colors outline-none focus:ring-2"
 							bind:value={identifier}
 						/>
@@ -285,7 +285,7 @@
 					</button>
 				</form>
 
-				<!-- Akun demo: klik untuk isi otomatis -->
+				<!-- Akun demo: isi username & password otomatis -->
 				<div class="mt-5">
 					<p class="text-caption mb-2 text-center">Coba langsung — klik salah satu akun demo:</p>
 					<div class="grid grid-cols-2 gap-3">
@@ -294,7 +294,8 @@
 							onclick={() => fillDemo('admin', 'admin123')}
 						>
 							<p class="text-ink-800 text-sm font-bold">👑 Pemilik</p>
-							<p class="text-caption mt-0.5 font-mono">admin / admin123</p>
+							<p class="text-caption mt-0.5 font-mono">user: admin</p>
+							<p class="text-caption mt-0.5 font-mono">pass: admin123</p>
 							<p class="text-caption text-success-600 mt-1">Akses semua halaman</p>
 						</button>
 						<button
@@ -302,7 +303,8 @@
 							onclick={() => fillDemo('kasir', 'kasir123')}
 						>
 							<p class="text-ink-800 text-sm font-bold">🧾 Kasir</p>
-							<p class="text-caption mt-0.5 font-mono">kasir / kasir123</p>
+							<p class="text-caption mt-0.5 font-mono">user: kasir</p>
+							<p class="text-caption mt-0.5 font-mono">pass: kasir123</p>
 							<p class="text-caption text-warning-600 mt-1">Tanpa halaman laporan</p>
 						</button>
 					</div>
@@ -311,8 +313,8 @@
 				<!-- Mode Buat Akun Sendiri (Perlu Persetujuan Pembuat/Pemilik) -->
 				<h2 class="text-h1 mt-6">Daftar Akun Baru</h2>
 				<p class="text-body mt-1">
-					Buat akun tokomu sendiri. Akun baru akan masuk ke antrean verifikasi pengawasan pembuat
-					aplikasi / pemilik.
+					Buat akun baru. Akun pertama menjadi pemilik toko; akun berikutnya menunggu persetujuan
+					pemilik.
 				</p>
 
 				<form class="card mt-6 space-y-4 p-6" onsubmit={submitRegister}>

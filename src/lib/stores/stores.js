@@ -1,20 +1,14 @@
-import { writable, derived, get } from 'svelte/store';
+﻿import { writable, derived, get } from 'svelte/store';
 import { browser } from '$app/environment';
+import { supabase } from '$lib/db-config.js';
 
 /**
  * ============================================================
- *  STORE UTAMA — Sistem Pembukuan & Kasir Toko Retail
+ *  STORE UTAMA â€” Sistem Pembukuan & Kasir Toko Retail
+ *  (Tersinkronisasi ke Cloud Supabase + Offline Cache)
  * ============================================================
- *  Semua data dipersist ke localStorage agar tidak hilang
- *  saat halaman direload. Pola yang dipakai:
- *
- *  1. `persisted(name, initial)` → writable + auto-sync localStorage
- *  2. Setiap perubahan pada store akan langsung tersimpan
- *  3. Store `cart`, `products`, `transactions`, `expenses` saling
- *     berhubungan melalui store `derived` untuk hitung total dsb.
  */
 
-/** Key prefix agar tidak bentrok dengan app lain di localStorage yang sama */
 const PREFIX = 'pos-kasir';
 
 function loadFromStorage(key, fallback) {
@@ -28,8 +22,6 @@ function loadFromStorage(key, fallback) {
 }
 
 /**
- * Membuat writable store yang otomatis tersinkronisasi dengan localStorage:
- * data dimuat saat aplikasi start, dan disimpan ulang di setiap perubahan.
  * @template T
  * @param {string} key
  * @param {T} initialValue
@@ -41,7 +33,7 @@ function persisted(key, initialValue) {
 			try {
 				localStorage.setItem(`${PREFIX}:${key}`, JSON.stringify(value));
 			} catch {
-				/* kuota penuh / mode privat — abaikan */
+				/* abaikan */
 			}
 		});
 	}
@@ -74,6 +66,73 @@ export function uid() {
 	return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+const DEFAULT_PRODUCTS = [
+	{
+		id: 'p-1',
+		name: 'Beras Premium 5kg',
+		category: 'Sembako',
+		buyPrice: 58000,
+		sellPrice: 68000,
+		stock: 25
+	},
+	{
+		id: 'p-2',
+		name: 'Minyak Goreng 1L',
+		category: 'Sembako',
+		buyPrice: 14000,
+		sellPrice: 17500,
+		stock: 40
+	},
+	{
+		id: 'p-3',
+		name: 'Gula Pasir 1kg',
+		category: 'Sembako',
+		buyPrice: 13000,
+		sellPrice: 16000,
+		stock: 30
+	},
+	{
+		id: 'p-4',
+		name: 'Kopi Sachet',
+		category: 'Minuman',
+		buyPrice: 1200,
+		sellPrice: 2000,
+		stock: 100
+	},
+	{
+		id: 'p-5',
+		name: 'Air Mineral 600ml',
+		category: 'Minuman',
+		buyPrice: 2500,
+		sellPrice: 4000,
+		stock: 60
+	},
+	{
+		id: 'p-6',
+		name: 'Mie Instan Goreng',
+		category: 'Makanan',
+		buyPrice: 2800,
+		sellPrice: 3500,
+		stock: 80
+	},
+	{
+		id: 'p-7',
+		name: 'Sabun Mandi Batang',
+		category: 'Perawatan',
+		buyPrice: 3800,
+		sellPrice: 5000,
+		stock: 20
+	},
+	{
+		id: 'p-8',
+		name: 'Deterjen 800g',
+		category: 'Perawatan',
+		buyPrice: 15500,
+		sellPrice: 19000,
+		stock: 15
+	}
+];
+
 /**
  * ------------------------------------------------------------
  *  DATA MASTER PRODUK
@@ -83,73 +142,7 @@ export function uid() {
  *    buyPrice:number, sellPrice:number, stock:number
  *  }>>}
  */
-export const products = persisted('products', [
-	// Data contoh agar aplikasi tidak kosong saat pertama dibuka
-	{
-		id: uid(),
-		name: 'Beras Premium 5kg',
-		category: 'Sembako',
-		buyPrice: 58000,
-		sellPrice: 68000,
-		stock: 25
-	},
-	{
-		id: uid(),
-		name: 'Minyak Goreng 1L',
-		category: 'Sembako',
-		buyPrice: 14000,
-		sellPrice: 17500,
-		stock: 40
-	},
-	{
-		id: uid(),
-		name: 'Gula Pasir 1kg',
-		category: 'Sembako',
-		buyPrice: 13000,
-		sellPrice: 16000,
-		stock: 30
-	},
-	{
-		id: uid(),
-		name: 'Kopi Sachet',
-		category: 'Minuman',
-		buyPrice: 1200,
-		sellPrice: 2000,
-		stock: 100
-	},
-	{
-		id: uid(),
-		name: 'Air Mineral 600ml',
-		category: 'Minuman',
-		buyPrice: 2500,
-		sellPrice: 4000,
-		stock: 60
-	},
-	{
-		id: uid(),
-		name: 'Mie Instan Goreng',
-		category: 'Makanan',
-		buyPrice: 2800,
-		sellPrice: 3500,
-		stock: 80
-	},
-	{
-		id: uid(),
-		name: 'Sabun Mandi Batang',
-		category: 'Perawatan',
-		buyPrice: 3800,
-		sellPrice: 5000,
-		stock: 20
-	},
-	{
-		id: uid(),
-		name: 'Deterjen 800g',
-		category: 'Perawatan',
-		buyPrice: 15500,
-		sellPrice: 19000,
-		stock: 15
-	}
-]);
+export const products = persisted('products', DEFAULT_PRODUCTS);
 
 /**
  * ------------------------------------------------------------
@@ -158,41 +151,6 @@ export const products = persisted('products', [
  *  @type {import('svelte/store').Writable<Array<{ id:string, productId:string, name:string, price:number, qty:number }>>}
  */
 export const cart = persisted('cart', []);
-
-/** Tambah produk ke keranjang (atau tambah qty jika sudah ada) */
-export function addToCart(product) {
-	cart.update((items) => {
-		const existing = items.find((i) => i.productId === product.id);
-		if (existing) {
-			// Batasi qty agar tidak melebihi stok yang ada
-			const maxQty = Math.min(existing.qty + 1, product.stock);
-			return items.map((i) => (i.productId === product.id ? { ...i, qty: maxQty } : i));
-		}
-		return [
-			...items,
-			{ id: uid(), productId: product.id, name: product.name, price: product.sellPrice, qty: 1 }
-		];
-	});
-}
-
-/** Ubah jumlah item di keranjang */
-export function setCartQty(cartItemId, qty) {
-	cart.update((items) =>
-		items
-			.map((i) => (i.id === cartItemId ? { ...i, qty: Math.max(1, Math.min(qty, 999)) } : i))
-			.filter((i) => i.qty > 0)
-	);
-}
-
-/** Hapus satu item dari keranjang */
-export function removeCartItem(cartItemId) {
-	cart.update((items) => items.filter((i) => i.id !== cartItemId));
-}
-
-/** Kosongkan keranjang */
-export function clearCart() {
-	cart.set([]);
-}
 
 /**
  * ------------------------------------------------------------
@@ -214,13 +172,119 @@ export const transactions = persisted('transactions', []);
  */
 export const expenses = persisted('expenses', []);
 
-/**
- * ============================================================
- *  STORE TURUNAN (derived) — dihitung ulang otomatis
- *  setiap kali data sumber berubah. Inilah reaktivitas
- *  khas Svelte: UI ikut update tanpa kode tambahan.
- * ============================================================
- */
+/** Sinkronisasi Produk, Transaksi, dan Pengeluaran dari Supabase Cloud */
+export async function syncDataFromCloud() {
+	if (!browser || !supabase) return;
+
+	// Jangan menyentuh cloud sebelum ada sesi login: request anonim dijamin gagal (401)
+	// dan menimpa data dengan seed palsu.
+	const { data: authData, error: authError } = await supabase.auth.getSession();
+	if (authError || !authData?.session) return;
+
+	try {
+		const [prodRes, txRes, expRes] = await Promise.all([
+			supabase.from('products').select('*').order('created_at', { ascending: true }),
+			supabase.from('transactions').select('*').order('date', { ascending: false }),
+			supabase.from('expenses').select('*').order('date', { ascending: false })
+		]);
+
+		if (!prodRes.error && Array.isArray(prodRes.data)) {
+			if (prodRes.data.length > 0) {
+				products.set(
+					prodRes.data.map((r) => ({
+						id: String(r.id),
+						name: String(r.name),
+						category: String(r.category || 'Lainnya'),
+						buyPrice: Number(r.buy_price) || 0,
+						sellPrice: Number(r.sell_price) || 0,
+						stock: Number(r.stock) || 0
+					}))
+				);
+			}
+		}
+
+		if (!txRes.error && Array.isArray(txRes.data)) {
+			transactions.set(
+				txRes.data.map((r) => ({
+					id: String(r.id),
+					date: r.date || new Date().toISOString(),
+					items: Array.isArray(r.items) ? r.items : [],
+					total: Number(r.total) || 0,
+					cost: Number(r.cost) || 0,
+					profit: Number(r.profit) || 0,
+					paid: Number(r.paid) || 0,
+					change: Number(r.change) || 0
+				}))
+			);
+		}
+
+		if (!expRes.error && Array.isArray(expRes.data)) {
+			expenses.set(
+				expRes.data.map((r) => ({
+					id: String(r.id),
+					date: r.date || new Date().toISOString(),
+					note: String(r.note),
+					amount: Number(r.amount) || 0
+				}))
+			);
+		}
+	} catch {
+		/* abaikan saat offline */
+	}
+}
+
+if (browser && supabase) {
+	syncDataFromCloud();
+
+	supabase
+		.channel('public:pos-data')
+		.on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, syncDataFromCloud)
+		.on(
+			'postgres_changes',
+			{ event: '*', schema: 'public', table: 'transactions' },
+			syncDataFromCloud
+		)
+		.on('postgres_changes', { event: '*', schema: 'public', table: 'expenses' }, syncDataFromCloud)
+		.subscribe();
+}
+
+/** Tambah produk ke keranjang (atau tambah qty jika sudah ada) */
+export function addToCart(product) {
+	cart.update((items) => {
+		const existing = items.find((i) => i.productId === product.id);
+		if (existing) {
+			const maxQty = Math.min(existing.qty + 1, product.stock);
+			return items.map((i) => (i.productId === product.id ? { ...i, qty: maxQty } : i));
+		}
+		return [
+			...items,
+			{ id: uid(), productId: product.id, name: product.name, price: product.sellPrice, qty: 1 }
+		];
+	});
+}
+
+/** Ubah jumlah item di keranjang */
+export function setCartQty(cartItemId, qty) {
+	cart.update((items) =>
+		items
+			.map((i) =>
+				i.id === cartItemId || i.productId === cartItemId
+					? { ...i, qty: Math.max(1, Math.min(qty, 999)) }
+					: i
+			)
+			.filter((i) => i.qty > 0)
+	);
+}
+
+/** Hapus satu item dari keranjang */
+export function removeCartItem(cartItemId) {
+	cart.update((items) => items.filter((i) => i.id !== cartItemId));
+}
+
+/** Kosongkan keranjang */
+export function clearCart() {
+	cart.set([]);
+}
 
 /** Total belanja keranjang saat ini */
 export const cartTotal = derived(cart, ($cart) =>
@@ -261,9 +325,6 @@ export const stats = derived([transactions, products, expenses], ([$txs, $produc
  * ============================================================
  *  LOGIKA INTI: MENYELESAIKAN TRANSAKSI KASIR
  * ============================================================
- *  1. Kurangi stok produk di data master secara otomatis
- *  2. Catat transaksi ke riwayat (kas masuk)
- *  3. Kosongkan keranjang
  *  @param {number} paid - uang yang dibayarkan pelanggan
  */
 export function checkout(paid) {
@@ -272,18 +333,25 @@ export function checkout(paid) {
 	if (items.length === 0) return { ok: false, reason: 'Keranjang kosong' };
 	if (paid < total) return { ok: false, reason: 'Pembayaran kurang dari total' };
 
-	// Hitung harga modal (HPP) dari data master
 	const allProducts = get(products);
 	const cost = items.reduce((s, i) => {
 		const p = allProducts.find((x) => x.id === i.productId);
 		return s + (p ? p.buyPrice * i.qty : 0);
 	}, 0);
 
+	/** @type {Array<{id: string, stock: number}>} */
+	const stockUpdates = [];
+
 	// 1) Potong stok di data master
 	products.update((list) =>
 		list.map((p) => {
 			const item = items.find((i) => i.productId === p.id);
-			return item ? { ...p, stock: Math.max(0, p.stock - item.qty) } : p;
+			if (item) {
+				const newStock = Math.max(0, p.stock - item.qty);
+				stockUpdates.push({ id: p.id, stock: newStock });
+				return { ...p, stock: newStock };
+			}
+			return p;
 		})
 	);
 
@@ -300,6 +368,31 @@ export function checkout(paid) {
 	};
 	transactions.update((list) => [tx, ...list]);
 
+	// Sinkronkan ke Supabase Cloud
+	if (browser && supabase) {
+		supabase
+			.from('transactions')
+			.insert({
+				id: tx.id,
+				date: tx.date,
+				items: tx.items,
+				total: tx.total,
+				cost: tx.cost,
+				profit: tx.profit,
+				paid: tx.paid,
+				change: tx.change
+			})
+			.then(() => {});
+
+		for (const u of stockUpdates) {
+			supabase
+				.from('products')
+				.update({ stock: u.stock })
+				.eq('id', u.id)
+				.then(() => {});
+		}
+	}
+
 	// 3) Bersihkan keranjang
 	cart.set([]);
 	return { ok: true, tx };
@@ -308,17 +401,44 @@ export function checkout(paid) {
 /** Tambah catatan pengeluaran operasional */
 export function addExpense(note, amount) {
 	if (!note || amount <= 0) return;
-	expenses.update((list) => [{ id: uid(), date: new Date().toISOString(), note, amount }, ...list]);
+	const newExp = { id: uid(), date: new Date().toISOString(), note, amount };
+	expenses.update((list) => [newExp, ...list]);
+
+	if (browser && supabase) {
+		supabase
+			.from('expenses')
+			.insert({
+				id: newExp.id,
+				date: newExp.date,
+				note: newExp.note,
+				amount: newExp.amount
+			})
+			.then(() => {});
+	}
 }
 
 /** Hapus catatan pengeluaran */
 export function removeExpense(id) {
 	expenses.update((list) => list.filter((e) => e.id !== id));
+	if (browser && supabase) {
+		supabase
+			.from('expenses')
+			.delete()
+			.eq('id', id)
+			.then(() => {});
+	}
 }
 
 /** Hapus semua riwayat transaksi penjualan (riwayat kembali kosong) */
 export function clearTransactions() {
 	transactions.set([]);
+	if (browser && supabase) {
+		supabase
+			.from('transactions')
+			.delete()
+			.neq('id', '')
+			.then(() => {});
+	}
 }
 
 /** CRUD Produk */
@@ -326,13 +446,47 @@ export function saveProduct(data) {
 	if (data.id) {
 		updateProduct(data.id, data);
 	} else {
-		products.update((list) => [...list, { ...data, id: uid() }]);
+		const newProd = { ...data, id: uid() };
+		products.update((list) => [...list, newProd]);
+		if (browser && supabase) {
+			supabase
+				.from('products')
+				.insert({
+					id: newProd.id,
+					name: newProd.name,
+					category: newProd.category,
+					buy_price: newProd.buyPrice,
+					sell_price: newProd.sellPrice,
+					stock: newProd.stock
+				})
+				.then(() => {});
+		}
 	}
 }
 export function updateProduct(id, data) {
 	products.update((list) => list.map((p) => (p.id === id ? { ...p, ...data, id } : p)));
+	if (browser && supabase) {
+		supabase
+			.from('products')
+			.update({
+				name: data.name,
+				category: data.category,
+				buy_price: data.buyPrice,
+				sell_price: data.sellPrice,
+				stock: data.stock
+			})
+			.eq('id', id)
+			.then(() => {});
+	}
 }
 export function deleteProduct(id) {
 	products.update((list) => list.filter((p) => p.id !== id));
 	cart.update((items) => items.filter((i) => i.productId !== id));
+	if (browser && supabase) {
+		supabase
+			.from('products')
+			.delete()
+			.eq('id', id)
+			.then(() => {});
+	}
 }

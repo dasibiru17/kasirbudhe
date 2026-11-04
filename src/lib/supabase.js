@@ -1,0 +1,24 @@
+import { createClient } from '@supabase/supabase-js';
+
+// Konfigurasi Supabase Cloud Database untuk Toko Sejahtera
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+
+/**
+ * Mode lokal (localhost / localStorage tanpa database eksternal) aktif secara default.
+ * Database Supabase hanya diaktifkan bila VITE_LOCAL_MODE diset eksplisit ke 'false'
+ * DAN kredensial Supabase tersedia.
+ */
+export const isLocalMode = String(import.meta.env.VITE_LOCAL_MODE ?? 'true').trim() !== 'false';
+
+export const isSupabaseConfigured = Boolean(supabaseUrl && supabaseAnonKey) && !isLocalMode;
+
+export const supabase = isSupabaseConfigured
+	? createClient(supabaseUrl, supabaseAnonKey, {
+			auth: {
+				persistSession: true,
+				autoRefreshToken: true,
+				detectSessionInUrl: true
+			}
+		})
+	: null;

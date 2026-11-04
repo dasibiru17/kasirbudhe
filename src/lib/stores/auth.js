@@ -1,19 +1,21 @@
-import { writable, get } from 'svelte/store';
+﻿import { writable, get } from 'svelte/store';
 import { browser } from '$app/environment';
+import { supabase } from '$lib/db-config.js';
 
 /**
  * ============================================================
- *  AUTH SEDERHANA — login lokal tanpa database / backend
+ *  AUTH & PENGAWASAN PENGGUNA â€” Sinkronisasi Cloud (Supabase) + Lokal
  * ============================================================
- *  - Daftar user + sesi login disimpan di localStorage
- *    (konsisten dengan arsitektur app ini yang full offline).
- *  - Login bisa pakai username ATAU email ATAU no. HP.
- *  - Password TIDAK disimpan polos, melainkan dalam bentuk hash
- *    sederhana agar tidak terbaca langsung di DevTools.
- *  - CATATAN: ini pengaman level toko (bukan keamanan serius).
+ *  - Terhubung langsung ke Supabase Cloud agar akun di HP & Laptop
+ *    terintegrasi menjadi satu dan real-time.
+ *  - Tetap menyimpan cache ke localStorage sebagai cadangan offline.
  */
 
 const PREFIX = 'pos-kasir';
+
+/** Status koneksi ke tabel cloud Supabase */
+export const cloudConnected = writable(false);
+export const cloudError = writable('');
 
 function loadFromStorage(key, fallback) {
 	if (!browser) return fallback;
@@ -40,8 +42,7 @@ function persisted(key, initialValue) {
 }
 
 /**
- * Hash sinkron sederhana (cyrb53) — cukup untuk menyamarkan
- * password di localStorage. BUKAN pengganti bcrypt/scrypt.
+ * Hash sinkron sederhana (cyrb53).
  */
 export function hashPassword(str) {
 	let h1 = 0xdeadbeef;
@@ -75,8 +76,8 @@ export function normPhone(v) {
 	return d;
 }
 
-/** Akun bawaan — dibuat otomatis saat pertama dibuka. */
-/** @type {Array<{ username:string, name:string, role:'pemilik'|'kasir', email:string, phone:string, passwordHash:string, status?:'aktif'|'menunggu'|'ditolak', createdAt?:string }>} */
+/** Akun bawaan â€” dibuat otomatis saat pertama dibuka. */
+/** @type {Array<{ id?:string, username:string, name:string, role:'pemilik'|'kasir', email:string, phone:string, passwordHash:string, status?:'aktif'|'menunggu'|'ditolak', createdAt?:string }>} */
 const DEFAULT_USERS = [
 	{
 		username: 'admin',
@@ -91,38 +92,117 @@ const DEFAULT_USERS = [
 		username: 'kasir',
 		name: 'Kasir Toko',
 		role: 'kasir',
-		email: '',
-		phone: '',
+		email: 'kasir@tokosejahtera.id',
+		phone: '081298765432',
 		passwordHash: hashPassword('kasir123'),
 		status: 'aktif'
 	}
 ];
 
 /**
- * @type {import('svelte/store').Writable<Array<{ username:string, name:string, role:'pemilik'|'kasir', email:string, phone:string, passwordHash:string, status?:'aktif'|'menunggu'|'ditolak', createdAt?:string }>>}
+ * @type {import('svelte/store').Writable<Array<{ id?:string, username:string, name:string, role:'pemilik'|'kasir', email:string, phone:string, passwordHash:string, status?:'aktif'|'menunggu'|'ditolak', createdAt?:string }>>}
  */
 export const users = persisted('users', DEFAULT_USERS);
 
-// Migrasi: pastikan akun bawaan ada + semua user punya field email/phone/status
+function mapRowToUser(row) {
+	return {
+		id: String(row.id ?? ''),
+		username: String(row.username ?? ''),
+		name: String(row.name ?? row.username ?? ''),
+		role: /** @type {'pemilik'|'kasir'} */ (row.role === 'kasir' ? 'kasir' : 'pemilik'),
+		email: normEmail(row.email),
+		phone: normPhone(row.phone),
+		passwordHash: String(row.password_hash ?? row.passwordHash ?? ''),
+		status: /** @type {'aktif'|'menunggu'|'ditolak'} */ (
+			row.status === 'menunggu' || row.status === 'ditolak' ? row.status : 'aktif'
+		),
+		createdAt: row.created_at || row.createdAt || new Date().toISOString()
+	};
+}
+
+function mapUserToRow(u) {
+	return {
+		username: normUsername(u.username),
+		name: u.name,
+		role: u.role === 'kasir' ? 'kasir' : 'pemilik',
+		email: normEmail(u.email),
+		phone: normPhone(u.phone),
+		password_hash: u.passwordHash,
+		status: u.status || 'aktif',
+		created_at: u.createdAt || new Date().toISOString()
+	};
+}
+
+/**
+ * Tarik data pengguna terbaru dari Supabase Cloud.
+ * Dilindungi RLS: pemilik melihat semua akun, pengguna lain hanya profilnya sendiri.
+ */
+export async function syncUsersFromCloud() {
+	if (!browser || !supabase) return;
+	try {
+		const { data, error } = await supabase
+			.from('users')
+			.select('*')
+			.order('created_at', { ascending: true });
+
+		if (error) {
+			cloudConnected.set(false);
+			cloudError.set(error.message || 'Tabel Supabase belum diinisialisasi');
+			return;
+		}
+
+		cloudConnected.set(true);
+		cloudError.set('');
+
+		if (Array.isArray(data) && data.length > 0) {
+			users.set(data.map(mapRowToUser));
+		}
+	} catch (err) {
+		cloudConnected.set(false);
+	}
+}
+
+// Migrasi lokal & inisialisasi sinkronisasi Cloud
+//
+// Mode cloud (Supabase): daftar pengguna HANYA berasal dari server. Akun demo/palsu di
+// localStorage dibuang supaya tidak menghalangi pendaftaran (username/email/no. HP
+// dianggap "sudah terdaftar" padahal tidak ada di database).
 if (browser) {
 	users.update((list) => {
 		const arr = Array.isArray(list) ? [...list] : [];
+
+		if (supabase) {
+			return arr
+				.filter((u) => u && u.id)
+				.map((u) => ({
+					username: String(u.username ?? ''),
+					name: String(u.name ?? u.username ?? ''),
+					role: u.role === 'kasir' ? 'kasir' : 'pemilik',
+					email: normEmail(u.email),
+					phone: normPhone(u.phone),
+					passwordHash: '',
+					status: u.status === 'menunggu' || u.status === 'ditolak' ? u.status : 'aktif',
+					createdAt: u.createdAt || new Date().toISOString()
+				}));
+		}
+
 		for (const d of DEFAULT_USERS) {
 			const i = arr.findIndex((u) => normUsername(u?.username) === d.username);
 			if (i === -1) {
 				arr.push({ ...d });
 			} else {
 				arr[i] = {
-					email: '',
-					phone: '',
+					...d,
 					...arr[i],
-					username: arr[i].username,
+					email: arr[i].email || d.email,
+					phone: arr[i].phone || d.phone,
+					passwordHash: arr[i].passwordHash || d.passwordHash,
+					username: arr[i].username || d.username,
 					role: arr[i].role === 'kasir' ? 'kasir' : 'pemilik',
 					status: arr[i].status || 'aktif'
 				};
 			}
 		}
-		// Normalisasi semua entri lama yang mungkin belum punya email/phone/status
 		return arr.map((u) => ({
 			username: String(u.username ?? ''),
 			name: String(u.name ?? u.username ?? ''),
@@ -134,6 +214,21 @@ if (browser) {
 			createdAt: u.createdAt || new Date().toISOString()
 		}));
 	});
+
+	// Jalankan sinkronisasi awal & berlangganan Realtime Supabase
+	syncUsersFromCloud();
+
+	if (supabase) {
+		supabase
+			.channel('public:users')
+			.on('postgres_changes', { event: '*', schema: 'public', table: 'users' }, () => {
+				syncUsersFromCloud();
+			})
+			.subscribe();
+
+		// Polling ringan setiap 8 detik agar di semua kondisi jaringan tetap real-time
+		setInterval(syncUsersFromCloud, 8000);
+	}
 }
 
 /**
@@ -157,11 +252,71 @@ export function findUser(identifier) {
 	});
 }
 
-/** Coba login pakai username / email / no. HP. @returns {{ ok:boolean, reason?:string }} */
-export function login(identifier, password) {
+/**
+ * Coba login pakai email (atau username bila akun lokal offline).
+ * Saat terhubung ke Supabase, autentikasi memakai Supabase Auth sehingga
+ * password diverifikasi di server (tidak memakai hash lokal).
+ */
+export async function login(identifier, password) {
 	if (!String(identifier ?? '').trim() || !password) {
-		return { ok: false, reason: 'Isi username / email / no. HP dan password dulu ya.' };
+		return { ok: false, reason: 'Isi email / username dan password dulu ya.' };
 	}
+
+	const asMail = normEmail(identifier);
+	const isEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(asMail);
+
+	// ---------------- Mode cloud (Supabase Auth) ----------------
+	if (supabase && isEmail) {
+		const { error } = await supabase.auth.signInWithPassword({ email: asMail, password });
+		if (error) {
+			return { ok: false, reason: 'Email atau password salah. Coba lagi.' };
+		}
+
+		// Pendaftar pertama otomatis menjadi pemilik toko (slot diklaim sekali)
+		await supabase.rpc('claim_owner');
+
+		await syncUsersFromCloud();
+		const profile = await fetchOwnProfile();
+		if (!profile) {
+			return {
+				ok: false,
+				reason:
+					'Profil akun belum tersedia di server. Pastikan skrip database versi aman sudah dijalankan.'
+			};
+		}
+		if (profile.status === 'menunggu') {
+			await supabase.auth.signOut();
+			return {
+				ok: false,
+				reason:
+					'Akun Anda sedang dalam peninjauan pembuat aplikasi / pemilik toko. Harap tunggu persetujuan.'
+			};
+		}
+		if (profile.status === 'ditolak') {
+			await supabase.auth.signOut();
+			return { ok: false, reason: 'Pendaftaran akun Anda ditolak oleh pemilik toko.' };
+		}
+
+		session.set({
+			username: profile.username,
+			name: profile.name,
+			role: profile.role,
+			loginAt: new Date().toISOString()
+		});
+		await new Promise((r) => setTimeout(r, 30));
+		return { ok: true };
+	}
+
+	// ---------------- Mode lokal / offline ----------------
+	if (supabase && !isEmail) {
+		return {
+			ok: false,
+			reason: 'Masuk ke database online memakai email. Isi alamat email Anda, bukan username.'
+		};
+	}
+
+	await syncUsersFromCloud();
+
 	const found = findUser(identifier);
 	if (!found || found.passwordHash !== hashPassword(password)) {
 		return { ok: false, reason: 'Akun atau password salah. Coba lagi.' };
@@ -169,7 +324,8 @@ export function login(identifier, password) {
 	if (found.status === 'menunggu') {
 		return {
 			ok: false,
-			reason: 'Akun Anda sedang dalam peninjauan pembuat aplikasi / pemilik toko. Harap tunggu persetujuan.'
+			reason:
+				'Akun Anda sedang dalam peninjauan pembuat aplikasi / pemilik toko. Harap tunggu persetujuan.'
 		};
 	}
 	if (found.status === 'ditolak') {
@@ -184,20 +340,43 @@ export function login(identifier, password) {
 		role: found.role,
 		loginAt: new Date().toISOString()
 	});
+
+	// Tunggu satu tick agar sesi sempat tersimpan di localStorage
+	// sebelum halaman login melakukan redirect.
+	await new Promise((r) => setTimeout(r, 30));
 	return { ok: true };
 }
 
-/** Keluar — hapus sesi, kembali ke halaman login. */
-export function logout() {
+/** Ambil profil akun yang sedang login dari server. */
+export async function fetchOwnProfile() {
+	if (!supabase) return null;
+	const { data: auth } = await supabase.auth.getUser();
+	const uid = auth?.user?.id;
+	if (!uid) return null;
+	const { data, error } = await supabase.from('users').select('*').eq('id', uid).maybeSingle();
+	if (error || !data) return null;
+	return mapRowToUser(data);
+}
+
+/** Keluar â€” hapus sesi lokal dan sesi Supabase. */
+export async function logout() {
 	session.set(null);
+	if (supabase) {
+		try {
+			await supabase.auth.signOut();
+		} catch {
+			/* abaikan saat offline */
+		}
+	}
 }
 
 /**
- * Tambah pengguna baru (khusus pemilik).
+ * Tambah pengguna baru (khusus pemilik â€” langsung aktif).
  * @param {{ username:string, name:string, role:string, email?:string, phone?:string, password:string }} data
- * @returns {{ ok:boolean, reason?:string }}
  */
-export function addUser(data) {
+export async function addUser(data) {
+	await syncUsersFromCloud();
+
 	const username = normUsername(data.username);
 	const name = String(data.name ?? '').trim();
 	const role = data.role === 'kasir' ? 'kasir' : 'pemilik';
@@ -207,12 +386,12 @@ export function addUser(data) {
 
 	if (!username) return { ok: false, reason: 'Username wajib diisi.' };
 	if (!/^[a-z0-9._-]{3,20}$/.test(username))
-		return { ok: false, reason: 'Username 3–20 karakter (huruf/angka/titik/_/-).' };
+		return { ok: false, reason: 'Username 3â€“20 karakter (huruf/angka/titik/_/-).' };
 	if (!name) return { ok: false, reason: 'Nama lengkap wajib diisi.' };
 	if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
 		return { ok: false, reason: 'Format email tidak valid.' };
 	if (phone && (phone.length < 9 || phone.length > 15))
-		return { ok: false, reason: 'No. HP tidak valid (9–15 digit).' };
+		return { ok: false, reason: 'No. HP tidak valid (9â€“15 digit).' };
 	if (password.length < 6) return { ok: false, reason: 'Password minimal 6 karakter.' };
 
 	const list = get(users);
@@ -223,18 +402,48 @@ export function addUser(data) {
 	if (phone && list.some((u) => u.phone && normPhone(u.phone) === phone))
 		return { ok: false, reason: `No. HP "${phone}" sudah terdaftar.` };
 
-	users.update((arr) => [
-		...arr,
-		{ username, name, role, email, phone, passwordHash: hashPassword(password) }
-	]);
+	const newUser = {
+		username,
+		name,
+		role: /** @type {'pemilik'|'kasir'} */ (role),
+		email,
+		phone,
+		passwordHash: hashPassword(password),
+		status: /** @type {'aktif'} */ ('aktif'),
+		createdAt: new Date().toISOString()
+	};
+
+	users.update((arr) => [...arr, newUser]);
+
+	if (supabase) {
+		// Akun di Supabase Auth dibuat lewat signUp; profilnya diisi otomatis oleh trigger.
+		// Akun karyawan yang dibuat pemilik langsung diaktifkan.
+		const { data: signUp, error } = await supabase.auth.signUp({
+			email: email || `${username}@toko-sejahtera.local`,
+			password,
+			options: { data: { username, name, phone, role } }
+		});
+		if (error) {
+			users.update((arr) => arr.filter((u) => normUsername(u.username) !== username));
+			cloudError.set(error.message);
+			return { ok: false, reason: error.message };
+		}
+		const newId = signUp?.user?.id;
+		if (newId) {
+			await supabase
+				.from('users')
+				.update({ name, role, email: email || '', phone, status: 'aktif' })
+				.eq('id', newId);
+		}
+		await syncUsersFromCloud();
+	}
 	return { ok: true };
 }
 
 /**
  * Ubah data pengguna (nama / role / email / phone). Username tidak bisa diubah.
- * @returns {{ ok:boolean, reason?:string }}
  */
-export function updateUser(username, patch) {
+export async function updateUser(username, patch) {
 	const key = normUsername(username);
 	const name = String(patch.name ?? '').trim();
 	const role = patch.role === 'kasir' ? 'kasir' : 'pemilik';
@@ -245,7 +454,7 @@ export function updateUser(username, patch) {
 	if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
 		return { ok: false, reason: 'Format email tidak valid.' };
 	if (phone && (phone.length < 9 || phone.length > 15))
-		return { ok: false, reason: 'No. HP tidak valid (9–15 digit).' };
+		return { ok: false, reason: 'No. HP tidak valid (9â€“15 digit).' };
 
 	const list = get(users);
 	if (
@@ -263,7 +472,11 @@ export function updateUser(username, patch) {
 		arr.map((u) => (normUsername(u.username) === key ? { ...u, name, role, email, phone } : u))
 	);
 
-	// Kalau yang diubah adalah akun yang sedang login, sinkronkan sesinya
+	if (supabase) {
+		await supabase.from('users').update({ name, role, email, phone }).eq('username', key);
+		await syncUsersFromCloud();
+	}
+
 	const s = get(session);
 	if (s && normUsername(s.username) === key) {
 		session.set({ ...s, name, role });
@@ -271,17 +484,34 @@ export function updateUser(username, patch) {
 	return { ok: true };
 }
 
-/** Reset password pengguna. @returns {{ ok:boolean, reason?:string }} */
-export function resetPassword(username, newPassword) {
+/** Reset password pengguna. */
+export async function resetPassword(username, newPassword) {
 	if (String(newPassword ?? '').length < 6)
 		return { ok: false, reason: 'Password baru minimal 6 karakter.' };
 	const key = normUsername(username);
+
+	// Mode cloud: password dikelola Supabase Auth, tidak bisa diubah oleh akun lain
+	// dari sisi klien. Pemilik me-reset lewat Dashboard (Authentication -> Users).
+	if (supabase) {
+		const me = get(session);
+		if (!me || normUsername(me.username) !== key) {
+			return {
+				ok: false,
+				reason:
+					'Reset password akun lain dilakukan lewat Dashboard Supabase (Authentication â†’ Users).'
+			};
+		}
+		const { error } = await supabase.auth.updateUser({ password: String(newPassword) });
+		return error ? { ok: false, reason: error.message } : { ok: true };
+	}
+
+	const passwordHash = hashPassword(newPassword);
 	let found = false;
 	users.update((arr) =>
 		arr.map((u) => {
 			if (normUsername(u.username) === key) {
 				found = true;
-				return { ...u, passwordHash: hashPassword(newPassword) };
+				return { ...u, passwordHash };
 			}
 			return u;
 		})
@@ -289,8 +519,8 @@ export function resetPassword(username, newPassword) {
 	return found ? { ok: true } : { ok: false, reason: 'Pengguna tidak ditemukan.' };
 }
 
-/** Hapus pengguna. Tidak bisa hapus diri sendiri / akun admin utama. @returns {{ ok:boolean, reason?:string }} */
-export function removeUser(username) {
+/** Hapus pengguna. Tidak bisa hapus diri sendiri / akun admin utama. */
+export async function removeUser(username) {
 	const key = normUsername(username);
 	if (key === 'admin') return { ok: false, reason: 'Akun admin utama tidak bisa dihapus.' };
 	const s = get(session);
@@ -302,6 +532,12 @@ export function removeUser(username) {
 		removed = next.length !== arr.length;
 		return next;
 	});
+	if (supabase && removed) {
+		// Hapus profil; penghapusan akun auth.users dilakukan oleh pemilik lewat Dashboard
+		// (butuh service_role key yang tidak boleh ada di frontend).
+		await supabase.from('users').delete().eq('username', key);
+		await syncUsersFromCloud();
+	}
 	return removed ? { ok: true } : { ok: false, reason: 'Pengguna tidak ditemukan.' };
 }
 
@@ -309,9 +545,10 @@ export function removeUser(username) {
  * Pendaftaran akun mandiri dari halaman login.
  * Status otomatis 'menunggu' agar ditinjau/diawasi oleh pemilik/pembuat aplikasi.
  * @param {{ username:string, name:string, role?:string, email?:string, phone?:string, password:string }} data
- * @returns {{ ok:boolean, reason?:string }}
  */
-export function registerAccount(data) {
+export async function registerAccount(data) {
+	await syncUsersFromCloud();
+
 	const username = normUsername(data.username);
 	const name = String(data.name ?? '').trim();
 	const role = data.role === 'pemilik' ? 'pemilik' : 'kasir';
@@ -321,12 +558,12 @@ export function registerAccount(data) {
 
 	if (!username) return { ok: false, reason: 'Username wajib diisi.' };
 	if (!/^[a-z0-9._-]{3,20}$/.test(username))
-		return { ok: false, reason: 'Username 3–20 karakter (huruf/angka/titik/_/-).' };
+		return { ok: false, reason: 'Username 3â€“20 karakter (huruf/angka/titik/_/-).' };
 	if (!name) return { ok: false, reason: 'Nama lengkap wajib diisi.' };
 	if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
 		return { ok: false, reason: 'Format email tidak valid.' };
 	if (phone && (phone.length < 9 || phone.length > 15))
-		return { ok: false, reason: 'No. HP tidak valid (9–15 digit).' };
+		return { ok: false, reason: 'No. HP tidak valid (9â€“15 digit).' };
 	if (password.length < 6) return { ok: false, reason: 'Password minimal 6 karakter.' };
 
 	const list = get(users);
@@ -337,24 +574,53 @@ export function registerAccount(data) {
 	if (phone && list.some((u) => u.phone && normPhone(u.phone) === phone))
 		return { ok: false, reason: `No. HP "${phone}" sudah terdaftar.` };
 
-	users.update((arr) => [
-		...arr,
-		{
-			username,
-			name,
-			role,
-			email,
-			phone,
-			passwordHash: hashPassword(password),
-			status: 'menunggu',
-			createdAt: new Date().toISOString()
+	const newUser = {
+		username,
+		name,
+		role: /** @type {'pemilik'|'kasir'} */ (role),
+		email,
+		phone,
+		passwordHash: hashPassword(password),
+		status: /** @type {'menunggu'} */ ('menunggu'),
+		createdAt: new Date().toISOString()
+	};
+
+	if (supabase) {
+		if (!email) {
+			return {
+				ok: false,
+				reason: 'Email wajib diisi agar akun cloud bisa dibuat dan diverifikasi pemilik toko.'
+			};
 		}
-	]);
+		// Daftar via Supabase Auth. Profil dibuat otomatis oleh trigger:
+		// pendaftar pertama = pemilik aktif, berikutnya = kasir dengan status 'menunggu'.
+		const { data: signUp, error } = await supabase.auth.signUp({
+			email,
+			password,
+			options: { data: { username, name, phone } }
+		});
+		if (error) {
+			cloudError.set(error.message);
+			return { ok: false, reason: error.message };
+		}
+		const newId = signUp?.user?.id;
+		if (newId) {
+			const ownerRes = await supabase.rpc('claim_owner');
+			const isOwner = ownerRes?.data === true;
+			users.update((arr) => [...arr, { ...newUser, role: isOwner ? 'pemilik' : role }]);
+			// Segarkan sesi agar data profil terbaru terbaca
+			await supabase.auth.refreshSession();
+			await syncUsersFromCloud();
+		}
+		return { ok: true };
+	}
+
+	users.update((arr) => [...arr, newUser]);
 	return { ok: true };
 }
 
 /** Setujui / terima akun baru yang mendaftar */
-export function approveUser(username) {
+export async function approveUser(username) {
 	const key = normUsername(username);
 	let found = false;
 	users.update((arr) =>
@@ -366,11 +632,15 @@ export function approveUser(username) {
 			return u;
 		})
 	);
+	if (supabase && found) {
+		await supabase.from('users').update({ status: 'aktif' }).eq('username', key);
+		await syncUsersFromCloud();
+	}
 	return found ? { ok: true } : { ok: false, reason: 'Pengguna tidak ditemukan.' };
 }
 
 /** Tolak akun baru yang mendaftar */
-export function rejectUser(username) {
+export async function rejectUser(username) {
 	const key = normUsername(username);
 	let found = false;
 	users.update((arr) =>
@@ -382,5 +652,9 @@ export function rejectUser(username) {
 			return u;
 		})
 	);
+	if (supabase && found) {
+		await supabase.from('users').update({ status: 'ditolak' }).eq('username', key);
+		await syncUsersFromCloud();
+	}
 	return found ? { ok: true } : { ok: false, reason: 'Pengguna tidak ditemukan.' };
 }

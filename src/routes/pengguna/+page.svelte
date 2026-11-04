@@ -44,9 +44,9 @@
 	}
 
 	/** @param {SubmitEvent} e */
-	function submitAdd(e) {
+	async function submitAdd(e) {
 		e.preventDefault();
-		const res = addUser(fu);
+		const res = await addUser(fu);
 		if (res.ok) {
 			notify('ok', `✅ Pengguna "${fu.username.trim().toLowerCase()}" berhasil ditambahkan.`);
 			fu = { username: '', name: '', role: 'kasir', email: '', phone: '', password: '' };
@@ -68,9 +68,9 @@
 	}
 
 	/** @param {SubmitEvent} e @param {string} username */
-	function submitEdit(e, username) {
+	async function submitEdit(e, username) {
 		e.preventDefault();
-		const res = updateUser(username, fe);
+		const res = await updateUser(username, fe);
 		if (res.ok) {
 			notify('ok', `✅ Data "${username}" diperbarui.`);
 			editing = null;
@@ -85,9 +85,9 @@
 	let pwBaru = $state('');
 
 	/** @param {SubmitEvent} e @param {string} username */
-	function submitReset(e, username) {
+	async function submitReset(e, username) {
 		e.preventDefault();
-		const res = resetPassword(username, pwBaru);
+		const res = await resetPassword(username, pwBaru);
 		if (res.ok) {
 			notify('ok', `✅ Password "${username}" berhasil direset.`);
 			pwTarget = null;
@@ -98,9 +98,9 @@
 	}
 
 	/** @param {string} username @param {string} name */
-	function hapus(username, name) {
+	async function hapus(username, name) {
 		if (confirm(`Hapus pengguna "${name}" (@${username})? Tidak bisa dikembalikan.`)) {
-			const res = removeUser(username);
+			const res = await removeUser(username);
 			notify(
 				res.ok ? 'ok' : 'err',
 				res.ok ? `🗑 Pengguna "${username}" dihapus.` : `⚠️ ${res.reason}`
@@ -139,40 +139,53 @@
 
 		<!-- ============ SECTION PENGAWASAN: PERMOHONAN AKUN BARU ============ -->
 		{#if pendingUsers.length > 0}
-			<div class="mt-6 rounded-2xl border-2 border-warning-300 bg-warning-50/70 p-5 shadow-sm">
+			<div class="border-warning-300 bg-warning-50/70 mt-6 rounded-2xl border-2 p-5 shadow-sm">
 				<div class="flex items-center justify-between gap-3">
 					<div>
-						<h2 class="text-h3 flex items-center gap-2 text-warning-900">
-							<span class="grid h-6 w-6 place-items-center rounded-full bg-warning-500 text-xs font-bold text-white">
+						<h2 class="text-h3 text-warning-900 flex items-center gap-2">
+							<span
+								class="bg-warning-500 grid h-6 w-6 place-items-center rounded-full text-xs font-bold text-white"
+							>
 								{pendingUsers.length}
 							</span>
 							Permohonan Akun Baru (Menunggu Pengawasan)
 						</h2>
-						<p class="text-caption mt-1 text-warning-700">
-							Pengguna berikut mendaftar secara mandiri melalui menu login dan memerlukan persetujuan pemilik sebelum bisa masuk.
+						<p class="text-caption text-warning-700 mt-1">
+							Pengguna berikut mendaftar secara mandiri melalui menu login dan memerlukan
+							persetujuan pemilik sebelum bisa masuk.
 						</p>
 					</div>
 				</div>
 
-				<ul class="mt-4 divide-y divide-warning-200 rounded-xl border border-warning-200 bg-surface">
+				<ul
+					class="divide-warning-200 border-warning-200 bg-surface mt-4 divide-y rounded-xl border"
+				>
 					{#each pendingUsers as pu (pu.username)}
 						<li class="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
 							<div class="flex items-center gap-3">
-								<div class="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-warning-500 text-sm font-bold text-white">
+								<div
+									class="bg-warning-500 grid h-10 w-10 shrink-0 place-items-center rounded-full text-sm font-bold text-white"
+								>
 									{(pu.name || pu.username).trim().charAt(0).toUpperCase()}
 								</div>
 								<div>
-									<p class="text-sm font-bold text-ink-800">
+									<p class="text-ink-800 text-sm font-bold">
 										{pu.name}
-										<span class="ml-1 rounded-full bg-warning-100 px-2 py-0.5 text-[10px] font-bold text-warning-800">
+										<span
+											class="bg-warning-100 text-warning-800 ml-1 rounded-full px-2 py-0.5 text-[10px] font-bold"
+										>
 											{pu.role === 'kasir' ? '🧾 Kasir' : '👑 Pemilik'}
 										</span>
-										<span class="ml-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800">
+										<span
+											class="ml-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800"
+										>
 											⏳ Menunggu Persetujuan
 										</span>
 									</p>
 									<p class="text-caption mt-0.5 font-mono">
-										@{pu.username}{pu.email ? ` · ✉️ ${pu.email}` : ''}{pu.phone ? ` · 📱 ${pu.phone}` : ''}
+										@{pu.username}{pu.email ? ` · ✉️ ${pu.email}` : ''}{pu.phone
+											? ` · 📱 ${pu.phone}`
+											: ''}
 									</p>
 								</div>
 							</div>
@@ -180,7 +193,7 @@
 							<div class="flex items-center gap-2 self-end sm:self-auto">
 								<button
 									type="button"
-									class="btn-press rounded-lg bg-success-600 px-3.5 py-1.5 text-xs font-bold text-white transition-colors hover:bg-success-700"
+									class="btn-press bg-success-600 hover:bg-success-700 rounded-lg px-3.5 py-1.5 text-xs font-bold text-white transition-colors"
 									onclick={() => {
 										approveUser(pu.username);
 										notify('ok', `✅ Akun "${pu.username}" berhasil disetujui dan kini aktif!`);
@@ -190,7 +203,7 @@
 								</button>
 								<button
 									type="button"
-									class="rounded-lg border border-danger-200 px-3.5 py-1.5 text-xs font-semibold text-danger-600 transition-colors hover:bg-danger-50"
+									class="border-danger-200 text-danger-600 hover:bg-danger-50 rounded-lg border px-3.5 py-1.5 text-xs font-semibold transition-colors"
 									onclick={() => {
 										rejectUser(pu.username);
 										notify('err', `🚫 Permohonan akun "${pu.username}" ditolak.`);
@@ -200,7 +213,7 @@
 								</button>
 								<button
 									type="button"
-									class="rounded-lg border border-line px-2.5 py-1.5 text-xs text-ink-400 hover:text-danger-600"
+									class="border-line text-ink-400 hover:text-danger-600 rounded-lg border px-2.5 py-1.5 text-xs"
 									title="Hapus permohonan"
 									onclick={() => hapus(pu.username, pu.name)}
 								>
@@ -345,7 +358,9 @@
 											>
 										{/if}
 										{#if u.status === 'ditolak'}
-											<span class="rounded-full bg-danger-100 px-2 py-0.5 text-[11px] font-bold text-danger-700">
+											<span
+												class="bg-danger-100 text-danger-700 rounded-full px-2 py-0.5 text-[11px] font-bold"
+											>
 												✕ ditolak
 											</span>
 										{/if}
