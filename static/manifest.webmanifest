@@ -1,0 +1,25 @@
+   {
+	"name": "Mini POS Toko Sejahtera",
+	"short_name": "POS Sejahtera",
+	"description": "Aplikasi Kasir & Pembukuan Retail Toko Sejahtera",
+	"start_url": "/",
+	"scope": "/",
+	"display": "standalone",
+	"orientation": "portrait-primary",
+	"background_color": "#f8fafc",
+	"theme_color": "#4f46e5",
+	"icons": [
+		{
+			"src": "/favicon.png",
+			"sizes": "192x192",
+			"type": "image/png",
+			"purpose": "any maskable"
+		},
+		{
+			"src": "/favicon.png",
+			"sizes": "512x512",
+			"type": "image/png",
+			"purpose": "any maskable"
+		}
+	]
+}

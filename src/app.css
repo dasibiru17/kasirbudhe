@@ -1,0 +1,125 @@
+@import 'tailwindcss';
+
+/* ============================================================
+   DESIGN TOKENS — Mini POS & Bookkeeping
+   Tema: SaaS finansial/retail modern, kontras tinggi, mata nyaman
+   ============================================================ */
+
+@theme static {
+	/* Font utama — Plus Jakarta Sans: geometris, angka tabular jelas,
+	   dibuat di Indonesia, cocok untuk dashboard keuangan retail */
+	--font-sans: 'Plus Jakarta Sans', ui-sans-serif, system-ui, sans-serif;
+
+	/* ---- Brand / CTA ---- */
+	--color-brand-50: oklch(96.2% 0.018 272.31); /* indigo-50  */
+	--color-brand-100: oklch(93% 0.034 272.79);
+	--color-brand-200: oklch(87% 0.065 274.04);
+	--color-brand-300: oklch(78.5% 0.115 274.03);
+	--color-brand-400: oklch(67.3% 0.182 276.97);
+	--color-brand-500: oklch(58.5% 0.233 277.12); /* indigo-500 — hover CTA */
+	--color-brand-600: oklch(51.1% 0.262 276.97); /* indigo-600 — CTA utama */
+	--color-brand-700: oklch(45.7% 0.243 277.03);
+	--color-brand-800: oklch(39.8% 0.195 277.37);
+	--color-brand-900: oklch(35.9% 0.144 278.7);
+
+	/* ---- Status: Keuntungan / kas masuk ---- */
+	--color-success-50: oklch(97.9% 0.021 166.11);
+	--color-success-100: oklch(95% 0.052 163.05);
+	--color-success-500: oklch(69.6% 0.17 162.48); /* emerald-500 */
+	--color-success-600: oklch(59.6% 0.145 163.23); /* emerald-600 — teks CTA sukses */
+	--color-success-700: oklch(50.8% 0.118 165.61);
+
+	/* ---- Status: Pengeluaran / kas keluar ---- */
+	--color-danger-50: oklch(97.1% 0.014 12.42);
+	--color-danger-100: oklch(94.2% 0.033 12.34);
+	--color-danger-500: oklch(63.7% 0.237 25.33); /* red-500 */
+	--color-danger-600: oklch(57.7% 0.245 27.33); /* red-600 — teks/ikon pengeluaran */
+	--color-danger-700: oklch(50.5% 0.213 27.52);
+
+	/* ---- Status: Stok menipis / peringatan ---- */
+	--color-warning-50: oklch(98.7% 0.022 95.28);
+	--color-warning-100: oklch(96.8% 0.075 95.53);
+	--color-warning-500: oklch(76.9% 0.188 70.08); /* amber-500 */
+	--color-warning-600: oklch(66.6% 0.179 58.32); /* amber-600 — teks stok menipis */
+	--color-warning-700: oklch(55.5% 0.163 48.99);
+
+	/* ---- Netral (surface) ---- */
+	--color-surface-0: #ffffff; /* kartu */
+	--color-surface-1: #f8fafc; /* halaman (slate-50) */
+	--color-surface-2: #f1f5f9; /* kartu sekunder (slate-100) */
+	--color-line: #e2e8f0; /* border (slate-200) */
+	--color-ink-900: #0f172a; /* teks judul (slate-900) */
+	--color-ink-700: #334155; /* teks isi (slate-700) */
+	--color-ink-500: #64748b; /* teks sekunder (slate-500) */
+	--color-ink-400: #94a3b8; /* teks placeholder (slate-400) */
+}
+
+/* ============================================================
+   DARK MODE — class strategy (toggle .dark di <html>)
+   ============================================================ */
+@custom-variant dark (&:where(.dark, .dark *));
+
+@layer base {
+	.dark {
+		--color-surface-0: #1e293b; /* kartu: slate-800 */
+		--color-surface-1: #0f172a; /* halaman: slate-900 */
+		--color-surface-2: #273449; /* kartu sekunder */
+		--color-line: #334155; /* border: slate-700 */
+		--color-ink-900: #f1f5f9; /* judul: slate-100 */
+		--color-ink-700: #cbd5e1; /* isi: slate-300 */
+		--color-ink-500: #94a3b8; /* sekunder */
+		--color-ink-400: #64748b; /* placeholder */
+	}
+
+	html {
+		/* Angka keuangan sejajar rapi (tabular) di seluruh tabel & statistik */
+		font-variant-numeric: tabular-nums;
+	}
+}
+
+/* ============================================================
+   UTILITAS KOMPOSISI — pakai ulang di semua komponen
+   ============================================================ */
+@utility card {
+	@apply rounded-xl border border-[var(--color-line)] bg-[var(--color-surface-0)] shadow-sm;
+}
+
+@utility btn-press {
+	/* Efek tekan kasir: turun 2px saat ditekan, ring halus saat hover */
+	transition:
+		transform 120ms cubic-bezier(0.34, 1.56, 0.64, 1),
+		box-shadow 120ms ease;
+	&:hover {
+		box-shadow: 0 4px 12px rgb(15 23 42 / 0.12);
+	}
+	&:active {
+		transform: translateY(2px) scale(0.98);
+		box-shadow: none;
+	}
+}
+
+/* ============================================================
+   TYPOGRAPHY SCALE
+   ============================================================ */
+@utility text-h1 {
+	@apply text-3xl font-bold tracking-tight text-[var(--color-ink-900)];
+}
+@utility text-h2 {
+	@apply text-xl font-bold tracking-tight text-[var(--color-ink-900)];
+}
+@utility text-h3 {
+	@apply text-base font-semibold text-[var(--color-ink-900)];
+}
+@utility text-body {
+	@apply text-sm font-normal text-[var(--color-ink-700)];
+}
+@utility text-caption {
+	@apply text-xs font-medium text-[var(--color-ink-500)];
+}
+@utility text-stat {
+	/* Angka statistik besar — tabular agar kolom angka tidak "menari" */
+	@apply text-2xl font-extrabold tracking-tight text-[var(--color-ink-900)] tabular-nums;
+}
+@utility text-stat-sm {
+	@apply text-lg font-bold text-[var(--color-ink-900)] tabular-nums;
+}
