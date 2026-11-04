@@ -35,8 +35,8 @@
 		bind:value={search}
 	/>
 
-	<div class="mt-6 overflow-hidden rounded-xl border border-line bg-surface">
-		<table class="w-full text-left text-sm">
+	<div class="mt-6 overflow-x-auto rounded-xl border border-line bg-surface">
+		<table class="w-full min-w-[560px] text-left text-sm">
 			<thead class="border-b border-line bg-surface-alt text-xs text-ink-500 uppercase">
 				<tr>
 					<th class="px-5 py-3 font-bold">Nama</th>

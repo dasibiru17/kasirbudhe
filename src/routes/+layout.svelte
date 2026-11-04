@@ -6,6 +6,7 @@
 	import { session, logout } from '$lib/stores/auth.js';
 
 	let { children } = $props();
+	let mobileMenuOpen = $state(false);
 
 	// Toggle tema Light/Dark — disimpan agar tetap saat reload
 	let dark = $state(false);
@@ -46,20 +47,33 @@
 	{@render children()}
 {:else if $session}
 	<div class="min-h-screen bg-[var(--color-surface-1)] font-sans">
-		<Sidebar {dark} ontoggletheme={() => (dark = !dark)} user={$session} onlogout={keluar} />
+		<Sidebar {dark} ontoggletheme={() => (dark = !dark)} user={$session} onlogout={keluar} mobileOpen={mobileMenuOpen} onclose={() => (mobileMenuOpen = false)} />
 
 		<!-- Bar atas untuk mobile -->
 		<header
-			class="sticky top-0 z-30 flex items-center gap-3 border-b border-[var(--color-line)] bg-[var(--color-surface-0)] px-4 py-3 lg:hidden"
+			class="sticky top-0 z-30 flex items-center gap-2.5 border-b border-[var(--color-line)] bg-[var(--color-surface-0)] px-3 py-2.5 sm:px-4 lg:hidden"
 		>
+			<button
+				type="button"
+				class="flex h-10 items-center gap-2 rounded-xl border border-[var(--color-line)] bg-[var(--color-surface-2)] px-2.5 text-xs font-bold text-[var(--color-ink-900)] shadow-xs transition-colors hover:bg-brand-50 hover:text-brand-700 active:scale-95"
+				onclick={() => (mobileMenuOpen = true)}
+				aria-label="Buka Menu Navigasi"
+			>
+				<span class="text-base leading-none">☰</span>
+				<span>Menu</span>
+			</button>
 			<div
-				class="bg-brand-600 grid h-8 w-8 place-items-center rounded-lg text-sm font-bold text-white"
+				class="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-brand-600 text-sm font-bold text-white shadow-xs"
 			>
 				K
 			</div>
-			<span class="font-bold text-[var(--color-ink-900)]">TOKO BUDhE</span>
+			<div class="min-w-0 flex-1">
+				<p class="truncate text-xs font-bold text-[var(--color-ink-900)] sm:text-sm">Toko Sejahtera</p>
+				<p class="truncate text-[10px] text-[var(--color-ink-400)] sm:text-xs">Mini POS & Bookkeeping</p>
+			</div>
 			<button
-				class="ml-auto rounded-lg border border-[var(--color-line)] px-2.5 py-1.5 text-xs font-semibold text-[var(--color-ink-700)]"
+				type="button"
+				class="shrink-0 rounded-lg border border-[var(--color-line)] px-2.5 py-1.5 text-xs font-semibold text-[var(--color-ink-700)] transition-colors hover:bg-danger-50 hover:text-danger-600"
 				onclick={keluar}
 				aria-label="Keluar"
 			>
@@ -67,7 +81,46 @@
 			</button>
 		</header>
 
-		<main class="p-4 sm:p-6 lg:pl-72">
+		<!-- Bottom bar navigasi cepat untuk HP -->
+		<nav
+			class="fixed inset-x-0 bottom-0 z-30 flex items-center justify-around border-t border-[var(--color-line)] bg-[var(--color-surface-0)]/95 py-1.5 backdrop-blur-md lg:hidden"
+			aria-label="Navigasi Bawah Mobile"
+		>
+			<a
+				href="/"
+				class="flex flex-col items-center gap-0.5 px-3 py-1 text-[11px] font-semibold transition-colors
+					{page.url.pathname === '/' ? 'text-brand-600 font-bold' : 'text-[var(--color-ink-500)] hover:text-[var(--color-ink-900)]'}"
+			>
+				<span class="text-base leading-none">📊</span>
+				<span>Dashboard</span>
+			</a>
+			<a
+				href="/kasir"
+				class="flex flex-col items-center gap-0.5 px-3 py-1 text-[11px] font-semibold transition-colors
+					{page.url.pathname === '/kasir' ? 'text-brand-600 font-bold' : 'text-[var(--color-ink-500)] hover:text-[var(--color-ink-900)]'}"
+			>
+				<span class="text-base leading-none">🛒</span>
+				<span>Kasir</span>
+			</a>
+			<a
+				href="/produk"
+				class="flex flex-col items-center gap-0.5 px-3 py-1 text-[11px] font-semibold transition-colors
+					{page.url.pathname === '/produk' ? 'text-brand-600 font-bold' : 'text-[var(--color-ink-500)] hover:text-[var(--color-ink-900)]'}"
+			>
+				<span class="text-base leading-none">📦</span>
+				<span>Produk</span>
+			</a>
+			<button
+				type="button"
+				class="flex flex-col items-center gap-0.5 px-3 py-1 text-[11px] font-semibold text-[var(--color-ink-500)] transition-colors hover:text-brand-600"
+				onclick={() => (mobileMenuOpen = true)}
+			>
+				<span class="text-base leading-none">☰</span>
+				<span>Lainnya</span>
+			</button>
+		</nav>
+
+		<main class="p-3 pb-20 sm:p-6 lg:p-6 lg:pb-6 lg:pl-72">
 			{@render children()}
 		</main>
 	</div>

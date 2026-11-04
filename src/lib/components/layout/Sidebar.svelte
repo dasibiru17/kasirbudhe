@@ -1,8 +1,29 @@
 <script>
 	import { page } from '$app/state';
 
-	/** @type {{ dark?: boolean, ontoggletheme?: () => void, user?: { name?: string, role?: string } | null, onlogout?: () => void }} */
-	let { dark = false, ontoggletheme = () => {}, user = null, onlogout = () => {} } = $props();
+	/** @type {{ dark?: boolean, ontoggletheme?: () => void, user?: { name?: string, role?: string } | null, onlogout?: () => void, mobileOpen?: boolean, onclose?: () => void }} */
+	let { dark = false, ontoggletheme = () => {}, user = null, onlogout = () => {}, mobileOpen = false, onclose = () => {} } = $props();
+	/** @type {HTMLDialogElement} */
+	let mobileDialog;
+
+	$effect(() => {
+	if (mobileOpen && mobileDialog && !mobileDialog.open) mobileDialog.showModal();
+	if (!mobileOpen && mobileDialog?.open) mobileDialog.close();
+	});
+
+	$effect(() => {
+	if (!mobileOpen) return;
+	const previous = document.body.style.overflow;
+		document.body.style.overflow = 'hidden';
+	const desktop = window.matchMedia('(min-width: 1024px)');
+	const closeOnDesktop = () => { if (desktop.matches) onclose(); };
+		desktop.addEventListener('change', closeOnDesktop);
+	closeOnDesktop();
+	return () => {
+		document.body.style.overflow = previous;
+		desktop.removeEventListener('change', closeOnDesktop);
+	};
+	});
 
 	const links = [
 		{ href: '/', label: 'Dashboard', icon: '📊' },
@@ -18,9 +39,7 @@
 	);
 </script>
 
-<aside
-	class="fixed inset-y-0 left-0 z-40 hidden w-64 flex-col border-r border-[var(--color-line)] bg-[var(--color-surface-0)] px-4 py-6 lg:flex"
->
+{#snippet menuContent()}
 	<!-- Logo / Brand -->
 	<div class="mb-8 flex items-center gap-3 px-2">
 		<div
@@ -39,6 +58,7 @@
 		{#each visibleLinks as link (link.href)}
 			<a
 				href={link.href}
+				onclick={onclose}
 				class="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors
 					{page.url.pathname === link.href
 					? 'bg-brand-50 font-semibold text-brand-700'
@@ -61,7 +81,7 @@
 				{(user.name || '?').trim().charAt(0).toUpperCase()}
 			</div>
 			<div class="min-w-0 flex-1">
-				<p class="truncate text-xs font-bold text-[var(--color-ink-900)]">{user.name}</p>
+				<p class="text-xs font-bold break-words text-[var(--color-ink-900)]">{user.name}</p>
 				<p class="text-[11px] text-[var(--color-ink-400)] capitalize">👤 {user.role || 'pengguna'}</p>
 			</div>
 			<button
@@ -84,4 +104,27 @@
 	</button>
 
 	<p class="px-3 text-xs text-[var(--color-ink-400)]">v1.1 — design by Dasi.biru17</p>
+{/snippet}
+
+<aside class="fixed inset-y-0 left-0 z-40 hidden w-64 flex-col overflow-y-auto border-r border-[var(--color-line)] bg-[var(--color-surface-0)] px-4 py-6 lg:flex">
+	{@render menuContent()}
 </aside>
+
+<dialog
+	bind:this={mobileDialog}
+	id="mobile-menu"
+	aria-label="Menu utama Toko Sejahtera"
+	onclose={onclose}
+	onclick={(event) => { if (event.target === mobileDialog) onclose(); }}
+	class="fixed inset-0 m-0 h-dvh max-h-none w-full max-w-none border-0 bg-transparent p-0 text-[var(--color-ink-900)] backdrop:bg-black/50 lg:hidden"
+>
+	<div class="flex h-full w-80 max-w-[85vw] flex-col overflow-y-auto bg-[var(--color-surface-0)] px-4 py-5 shadow-xl">
+	<button
+		type="button"
+	class="mb-4 min-h-11 self-end rounded-lg border-[var(--color-line)] px-3 text-sm font-semibold hover:bg-[var(--color-surface-2)]"
+		onclick={onclose}
+	aria-label="Tutup menu"
+	>✕ Tutup</button>
+	{@render menuContent()}
+	</div>
+</dialog>

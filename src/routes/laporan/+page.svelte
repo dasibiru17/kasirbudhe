@@ -150,8 +150,8 @@
 			{#if $transactions.length === 0}
 				<p class="text-ink-400 px-5 py-8 text-center text-sm">Belum ada transaksi.</p>
 			{:else}
-				<div class="max-h-[32rem] overflow-y-auto">
-					<table class="w-full text-left text-sm">
+				<div class="max-h-[32rem] overflow-x-auto overflow-y-auto">
+					<table class="w-full min-w-[560px] text-left text-sm">
 						<thead class="border-line bg-surface-alt text-ink-500 border-b text-xs uppercase">
 							<tr>
 								<th class="px-5 py-3 font-bold">Waktu</th>
