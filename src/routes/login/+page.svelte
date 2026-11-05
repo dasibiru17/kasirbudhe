@@ -4,6 +4,8 @@
 	import { fly, fade, scale } from 'svelte/transition';
 	import { quintOut } from 'svelte/easing';
 	import { session, login, registerAccount } from '$lib/stores/auth.js';
+	import { supabase } from '$lib/db-config.js';
+	import { panduanTab } from '$lib/stores/ui.js';
 
 	let mode = $state('login'); // 'login' | 'register'
 	let identifier = $state('');
@@ -23,6 +25,10 @@
 		password: ''
 	});
 	let regShowPw = $state(false);
+
+	// Akun demo hanya berlaku saat aplikasi berjalan tanpa database cloud.
+	// Di mode cloud password diverifikasi Supabase Auth, jadi akun demo tidak bisa dipakai.
+	const demoAvailable = !supabase;
 
 	const redirect = $derived(page.url.searchParams.get('redirect') || '/');
 
@@ -45,7 +51,11 @@
 		const res = await login(identifier, password);
 		loading = false;
 		if (res.ok) {
-			goto(redirect);
+			// Setelah masuk, selalu mendarat di menu gabungan (Dashboard + Panduan).
+			// Redirect yang tersimpan hanya dipakai bila mengarah ke halaman lain.
+			const tujuan = redirect && redirect !== '/' ? redirect : '/';
+			if (tujuan === '/') panduanTab.set('beranda');
+			goto(tujuan);
 		} else {
 			error = res.reason || 'Gagal masuk.';
 		}
@@ -285,7 +295,15 @@
 					</button>
 				</form>
 
-				<!-- Akun demo: isi username & password otomatis -->
+				<!-- Akun demo: hanya tersedia di mode lokal/offline -->
+				{#if !demoAvailable}
+					<div
+						class="border-line text-ink-500 mt-5 rounded-xl border bg-[var(--color-surface-2)] p-3.5 text-center text-[11px] leading-relaxed"
+					>
+						🔐 Masuk memakai <b>email</b> dan password yang terdaftar di server. Akun demo (admin/
+						kasir) hanya berlaku saat aplikasi berjalan dalam mode lokal tanpa database.
+					</div>
+				{:else}
 				<div class="mt-5">
 					<p class="text-caption mb-2 text-center">Coba langsung — klik salah satu akun demo:</p>
 					<div class="grid grid-cols-2 gap-3">
@@ -309,6 +327,7 @@
 						</button>
 					</div>
 				</div>
+				{/if}
 			{:else}
 				<!-- Mode Buat Akun Sendiri (Perlu Persetujuan Pembuat/Pemilik) -->
 				<h2 class="text-h1 mt-6">Daftar Akun Baru</h2>

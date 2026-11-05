@@ -1,7 +1,14 @@
 import { createClient } from '@supabase/supabase-js';
 
 // Konfigurasi Supabase Cloud Database untuk Toko Sejahtera
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
+// URL asli project saja (tanpa /rest/v1/ atau /auth/v1/).
+const normalizeSupabaseUrl = (v) =>
+	String(v ?? '')
+		.trim()
+		.replace(/\/+$/, '')
+		.replace(/\/(rest|auth)\/v1$/, '');
+
+const supabaseUrl = normalizeSupabaseUrl(import.meta.env.VITE_SUPABASE_URL);
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 
 /**

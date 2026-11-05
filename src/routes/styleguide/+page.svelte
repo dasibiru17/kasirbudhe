@@ -11,11 +11,11 @@
 	const fiturList = [
 		{
 			icon: '📊',
-			judul: 'Dashboard',
+			judul: 'Beranda & Panduan',
 			deskripsi:
-				'Ringkasan stok, nilai modal, omzet & laba hari ini, peringatan stok menipis, dan transaksi terakhir.',
+				'Satu menu gabungan: ringkasan stok, nilai modal, omzet & laba hari ini, kesehatan stok, distribusi kategori, produk terlaris, peringatan stok menipis, transaksi terakhir — plus tab Panduan berisi cara pakai, tips, dan simulasi pembayaran.',
 			link: '/',
-			linkLabel: 'Buka Dashboard'
+			linkLabel: 'Buka Beranda & Panduan'
 		},
 		{
 			icon: '🛒',
@@ -87,14 +87,14 @@
 		class="from-brand-600 via-brand-700 to-brand-900 mb-8 rounded-xl bg-linear-to-br p-8 text-white sm:p-10"
 	>
 		<p class="text-brand-200 text-xs font-bold tracking-[0.2em] uppercase">
-			Mini POS & Bookkeeping — v1.1
+			Mini POS & Bookkeeping — v1.2
 		</p>
 		<h1 class="mt-2 text-3xl font-bold tracking-tight sm:text-4xl">
-			Panduan Aplikasi Toko Sejahtera
+			Style Guide & Design System
 		</h1>
 		<p class="text-brand-100 mt-3 max-w-2xl text-sm leading-relaxed sm:text-base">
-			Semua yang perlu kamu tahu untuk menjalankan kasir & pembukuan tokomu — dari mengisi produk
-			pertama sampai mencetak laporan keuangan.
+			Referensi token warna, tipografi, komponen, dan panduan penggunaan aplikasi Toko Sejahtera.
+			Panduan harian kini menyatu di menu <b class="text-white">Beranda & Panduan</b>.
 		</p>
 		<div class="mt-5 flex flex-wrap gap-3">
 			<a
@@ -251,15 +251,24 @@
 				<ul class="text-body space-y-1.5">
 					<li>• SvelteKit (Svelte 5 + runes) & Tailwind CSS v4</li>
 					<li>• Font: Plus Jakarta Sans · angka tabular</li>
-					<li>• Penyimpanan: localStorage browser</li>
+					<li>• Penyimpanan: localStorage browser (+ Supabase opsional)</li>
 					<li>• Tanpa backend — jalan sepenuhnya offline</li>
+					<li>• Tema terang & gelap, responsif dari 360px</li>
+					<li>• Animasi menghormati <i>prefers-reduced-motion</i></li>
 				</ul>
 			</div>
 			<div>
 				<p class="text-h3 mb-2">Kredit</p>
-				<p class="text-body">Design by <b>Dasi.biru17</b> — v1.1</p>
+				<p class="text-body">Design by <b>Dasi.biru17</b> — v1.2</p>
 				<p class="text-caption mt-2">
 					Dibuat untuk pemilik toko retail kecil: kasir cepat, pembukuan jelas, tanpa ribet.
+				</p>
+				<p class="text-h3 mt-4 mb-2">Data Seed Awal</p>
+				<p class="text-caption">
+					Saat pertama dibuka, aplikasi mengisi 8 produk contoh (sembako, minuman, makanan,
+					perawatan). Untuk mengosongkan, hapus key <code class="bg-surface-2 rounded px-1 py-0.5"
+						>pos-kasir:products</code
+					> di DevTools → Application → Local Storage.
 				</p>
 			</div>
 		</div>

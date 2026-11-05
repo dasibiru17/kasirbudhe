@@ -25,12 +25,15 @@
 	} = $props();
 
 	// Tween deterministik: setiap perubahan value dianimasikan dengan `duration`
-	const tween = $state(new Tween(0, { easing: cubicOut }));
+	// (bukan $state: Tween sudah reaktif sendiri lewat tween.current)
+	const tween = new Tween(0, { easing: cubicOut });
 	let display = $derived(Math.round(tween.current));
 
-	// Dorong tween ke nilai target setiap kali value berubah
+	// Dorong tween ke nilai target setiap kali value/duration berubah
 	$effect(() => {
-		tween.set(value, { duration });
+		const target = value;
+		const ms = duration;
+		tween.set(target, { duration: ms });
 	});
 
 	// Kedip warna sesuai arah perubahan (naik = hijau, turun = merah)

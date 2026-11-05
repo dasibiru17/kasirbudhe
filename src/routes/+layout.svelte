@@ -105,7 +105,7 @@
 					: 'text-[var(--color-ink-500)] hover:text-[var(--color-ink-900)]'}"
 			>
 				<span class="text-base leading-none">📊</span>
-				<span>Dashboard</span>
+				<span>Beranda</span>
 			</a>
 			<a
 				href="/kasir"
@@ -126,6 +126,16 @@
 			>
 				<span class="text-base leading-none">📦</span>
 				<span>Produk</span>
+			</a>
+			<a
+				href="/promo"
+				class="flex flex-col items-center gap-0.5 px-3 py-1 text-[11px] font-semibold transition-colors
+					{page.url.pathname === '/promo'
+					? 'text-brand-600 font-bold'
+					: 'text-[var(--color-ink-500)] hover:text-[var(--color-ink-900)]'}"
+			>
+				<span class="text-base leading-none">📣</span>
+				<span>Promo</span>
 			</a>
 			<button
 				type="button"

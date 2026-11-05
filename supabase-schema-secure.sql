@@ -63,6 +63,20 @@ create table if not exists public.expenses (
     created_at timestamptz default now()
 );
 
+-- Riwayat stok opname (penyesuaian stok fisik vs sistem)
+create table if not exists public.stock_ops (
+    id text primary key,
+    date timestamptz default now(),
+    product_id text not null,
+    name text not null,
+    before integer not null default 0,
+    after integer not null default 0,
+    diff integer not null default 0,
+    value numeric not null default 0,
+    note text default '',
+    created_at timestamptz default now()
+);
+
 -- =====================================================================
 --  3. HELPER OTORISASI (SECURITY DEFINER agar tidak rekursif dgn RLS)
 -- =====================================================================
@@ -335,6 +349,19 @@ create policy "expenses_owner_manage" on public.expenses
     for all to authenticated
     using (public.is_owner())
     with check (public.is_owner());
+
+-- --- stock_ops (riwayat opname; semua staff aktif boleh baca, pemilik kelola) ---
+create policy "stock_ops_read_active" on public.stock_ops
+    for select to authenticated
+    using (public.is_active());
+
+create policy "stock_ops_insert_active" on public.stock_ops
+    for insert to authenticated
+    with check (public.is_active());
+
+create policy "stock_ops_owner_manage" on public.stock_ops
+    for delete to authenticated
+    using (public.is_owner());
 
 -- --- app_config ------------------------------------------------------
 create policy "app_config_owner_read" on public.app_config

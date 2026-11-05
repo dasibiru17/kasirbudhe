@@ -1,6 +1,7 @@
 <script>
 	import { page } from '$app/state';
 	import { users } from '$lib/stores/auth.js';
+	import CloudStatus from './CloudStatus.svelte';
 
 	/** @type {{ dark?: boolean, ontoggletheme?: () => void, user?: { name?: string, role?: string } | null, onlogout?: () => void, mobileOpen?: boolean, onclose?: () => void }} */
 	let { dark = false, ontoggletheme = () => {}, user = null, onlogout = () => {}, mobileOpen = false, onclose = () => {} } = $props();
@@ -29,10 +30,13 @@
 	});
 
 	const links = [
-		{ href: '/', label: 'Dashboard', icon: '📊' },
+		{ href: '/', label: 'Beranda & Panduan', icon: '📊' },
 		{ href: '/kasir', label: 'Kasir (POS)', icon: '🛒' },
 		{ href: '/produk', label: 'Produk & Stok', icon: '📦' },
+		{ href: '/stok-opname', label: 'Stok Opname', icon: '🔄' },
+		{ href: '/promo', label: 'Pusat Promo', icon: '📣' },
 		{ href: '/laporan', label: 'Laporan / Buku Kas', icon: '📒', owner: true },
+		{ href: '/analitik', label: 'Analitik Penjualan', icon: '📈', owner: true },
 		{ href: '/pengguna', label: 'Kelola Pengguna', icon: '👥', owner: true },
 		{ href: '/styleguide', label: 'Style Guide', icon: '🎨' }
 	];
@@ -62,10 +66,10 @@
 			<a
 				href={link.href}
 				onclick={onclose}
-				class="flex items-center justify-between rounded-lg px-3 py-2.5 text-sm font-medium transition-colors
+				class="flex items-center justify-between rounded-lg px-3 py-2.5 text-sm font-medium transition-colors duration-200
 					{page.url.pathname === link.href
-					? 'bg-brand-50 font-semibold text-brand-700'
-					: 'text-[var(--color-ink-700)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-ink-900)]'}"
+					? 'bg-brand-50 font-semibold text-brand-700 shadow-xs'
+					: 'text-[var(--color-ink-700)] hover:translate-x-0.5 hover:bg-[var(--color-surface-2)] hover:text-[var(--color-ink-900)]'}"
 			>
 				<span class="flex items-center gap-3">
 					<span class="text-base">{link.icon}</span>
@@ -79,6 +83,11 @@
 			</a>
 		{/each}
 	</nav>
+
+	<!-- Status koneksi database -->
+	<div class="mb-3">
+		<CloudStatus />
+	</div>
 
 	<!-- Profil user yang sedang login -->
 	{#if user}

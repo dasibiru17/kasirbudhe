@@ -172,6 +172,95 @@ export const transactions = persisted('transactions', []);
  */
 export const expenses = persisted('expenses', []);
 
+/**
+ * ------------------------------------------------------------
+ *  RIWAYAT STOK OPNAME (penyesuaian stok fisik)
+ * ------------------------------------------------------------
+ *  Setiap penyesuaian dicatat agar selisih stok bisa diaudit:
+ *  stok sistem → stok fisik, beserta nilai kerugian/keuntungannya.
+ *  @type {import('svelte/store').Writable<Array<{
+ *    id:string, date:string, productId:string, name:string,
+ *    before:number, after:number, diff:number, value:number, note:string
+ *  }>>}
+ */
+export const stockOps = persisted('stockOps', []);
+
+/**
+ * Terapkan hasil hitung fisik (stok opname) pada satu produk.
+ * @param {string} productId
+ * @param {number} physicalStock stok hasil hitung fisik
+ * @param {string} [note]
+ * @returns {{ ok:boolean, reason?:string, diff?:number }}
+ */
+export function applyStockOpname(productId, physicalStock, note = '') {
+	const list = get(products);
+	const p = list.find((x) => x.id === productId);
+	if (!p) return { ok: false, reason: 'Produk tidak ditemukan' };
+
+	const after = Math.max(0, Math.floor(Number(physicalStock) || 0));
+	const before = p.stock;
+	const diff = after - before;
+	if (diff === 0) return { ok: false, reason: 'Stok sudah sama — tidak ada penyesuaian.' };
+
+	products.update((items) => items.map((x) => (x.id === productId ? { ...x, stock: after } : x)));
+
+	stockOps.update((items) => [
+		{
+			id: uid(),
+			date: new Date().toISOString(),
+			productId,
+			name: p.name,
+			before,
+			after,
+			diff,
+			// Nilai selisih memakai harga beli (modal) — kerugian bila diff negatif
+			value: diff * (p.buyPrice || 0),
+			note: String(note || '').trim()
+		},
+		...items
+	]);
+
+	// Sinkronkan ke Supabase Cloud bila aktif
+	if (browser && supabase) {
+		const record = get(stockOps)[0];
+		if (record) {
+			supabase
+				.from('stock_ops')
+				.insert({
+					id: record.id,
+					date: record.date,
+					product_id: record.productId,
+					name: record.name,
+					before: record.before,
+					after: record.after,
+					diff: record.diff,
+					value: record.value,
+					note: record.note
+				})
+				.then(() => {});
+		}
+	}
+
+	// Sinkronkan stok baru ke cloud bila aktif
+	if (browser && supabase) {
+		supabase
+			.from('products')
+			.update({ stock: after })
+			.eq('id', productId)
+			.then(() => {});
+	}
+
+	return { ok: true, diff };
+}
+
+/** Hapus satu catatan riwayat opname (tidak mengubah stok produk). */
+export function removeStockOp(id) {
+	stockOps.update((items) => items.filter((x) => x.id !== id));
+	if (browser && supabase) {
+		supabase.from('stock_ops').delete().eq('id', id).then(() => {});
+	}
+}
+
 /** Sinkronisasi Produk, Transaksi, dan Pengeluaran dari Supabase Cloud */
 export async function syncDataFromCloud() {
 	if (!browser || !supabase) return;
@@ -182,10 +271,11 @@ export async function syncDataFromCloud() {
 	if (authError || !authData?.session) return;
 
 	try {
-		const [prodRes, txRes, expRes] = await Promise.all([
+		const [prodRes, txRes, expRes, opRes] = await Promise.all([
 			supabase.from('products').select('*').order('created_at', { ascending: true }),
 			supabase.from('transactions').select('*').order('date', { ascending: false }),
-			supabase.from('expenses').select('*').order('date', { ascending: false })
+			supabase.from('expenses').select('*').order('date', { ascending: false }),
+			supabase.from('stock_ops').select('*').order('date', { ascending: false })
 		]);
 
 		if (!prodRes.error && Array.isArray(prodRes.data)) {
@@ -228,6 +318,22 @@ export async function syncDataFromCloud() {
 				}))
 			);
 		}
+
+		if (!opRes.error && Array.isArray(opRes.data)) {
+			stockOps.set(
+				opRes.data.map((r) => ({
+					id: String(r.id),
+					date: r.date || new Date().toISOString(),
+					productId: String(r.product_id || ''),
+					name: String(r.name || ''),
+					before: Number(r.before) || 0,
+					after: Number(r.after) || 0,
+					diff: Number(r.diff) || 0,
+					value: Number(r.value) || 0,
+					note: String(r.note || '')
+				}))
+			);
+		}
 	} catch {
 		/* abaikan saat offline */
 	}
@@ -245,6 +351,7 @@ if (browser && supabase) {
 			syncDataFromCloud
 		)
 		.on('postgres_changes', { event: '*', schema: 'public', table: 'expenses' }, syncDataFromCloud)
+		.on('postgres_changes', { event: '*', schema: 'public', table: 'stock_ops' }, syncDataFromCloud)
 		.subscribe();
 }
 
