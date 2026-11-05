@@ -269,19 +269,48 @@ export async function login(identifier, password) {
 	if (supabase && isEmail) {
 		const { error } = await supabase.auth.signInWithPassword({ email: asMail, password });
 		if (error) {
-			return { ok: false, reason: 'Email atau password salah. Coba lagi.' };
+			const msg = String(error.message || '');
+			if (/invalid login credentials/i.test(msg)) {
+				return { ok: false, reason: 'Email atau password salah. Coba lagi.' };
+			}
+			if (/email not confirmed/i.test(msg)) {
+				return {
+					ok: false,
+					reason:
+						'Email belum dikonfirmasi. Buka Supabase → Authentication → Users, lalu klik "Confirm email" pada akun Anda.'
+				};
+			}
+			if (/fetch|network|failed to fetch|timeout/i.test(msg)) {
+				return {
+					ok: false,
+					reason: 'Tidak bisa menghubungi server database. Periksa koneksi internet lalu coba lagi.'
+				};
+			}
+			return { ok: false, reason: msg || 'Gagal masuk. Coba lagi.' };
 		}
 
-		// Pendaftar pertama otomatis menjadi pemilik toko (slot diklaim sekali)
-		await supabase.rpc('claim_owner');
+		// Pendaftar pertama otomatis menjadi pemilik toko (slot diklaim sekali).
+		// Kegagalan di sini tidak boleh menggagalkan login.
+		try {
+			await supabase.rpc('claim_owner');
+		} catch {
+			/* abaikan */
+		}
 
-		await syncUsersFromCloud();
+		// Sinkronisasi daftar pengguna bersifat opsional — jangan sampai
+		// kegagalan jaringan membuat login yang sudah berhasil ikut gagal.
+		try {
+			await syncUsersFromCloud();
+		} catch {
+			/* abaikan */
+		}
+
 		const profile = await fetchOwnProfile();
 		if (!profile) {
 			return {
 				ok: false,
 				reason:
-					'Profil akun belum tersedia di server. Pastikan skrip database versi aman sudah dijalankan.'
+					'Login berhasil, tetapi profil akun belum ada di tabel users. Jalankan skrip SQL perbaikan (scripts/fix-owner-wahyu17.sql) di Supabase SQL Editor.'
 			};
 		}
 		if (profile.status === 'menunggu') {
@@ -353,9 +382,15 @@ export async function fetchOwnProfile() {
 	const { data: auth } = await supabase.auth.getUser();
 	const uid = auth?.user?.id;
 	if (!uid) return null;
-	const { data, error } = await supabase.from('users').select('*').eq('id', uid).maybeSingle();
-	if (error || !data) return null;
-	return mapRowToUser(data);
+
+	// Coba beberapa kali: sesi yang baru dibuat kadang belum terbaca RLS
+	// pada percobaan pertama (race condition token).
+	for (let attempt = 0; attempt < 3; attempt++) {
+		const { data, error } = await supabase.from('users').select('*').eq('id', uid).maybeSingle();
+		if (!error && data) return mapRowToUser(data);
+		if (attempt < 2) await new Promise((r) => setTimeout(r, 250));
+	}
+	return null;
 }
 
 /** Keluar â€” hapus sesi lokal dan sesi Supabase. */
