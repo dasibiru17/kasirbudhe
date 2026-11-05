@@ -451,26 +451,37 @@ export async function addUser(data) {
 	users.update((arr) => [...arr, newUser]);
 
 	if (supabase) {
-		// Akun di Supabase Auth dibuat lewat signUp; profilnya diisi otomatis oleh trigger.
-		// Akun karyawan yang dibuat pemilik langsung diaktifkan.
-		const { data: signUp, error } = await supabase.auth.signUp({
-			email: email || `${username}@toko-sejahtera.local`,
-			password,
-			options: { data: { username, name, phone, role } }
+		// Akun dibuat lewat fungsi database create_user() yang menulis langsung ke
+		// auth.users + public.users. TIDAK mengirim email sama sekali, sehingga
+		// tidak pernah kena "email rate limit exceeded" dan akun langsung aktif.
+		const { data: newId, error } = await supabase.rpc('create_user', {
+			p_username: username,
+			p_name: name,
+			p_password: password,
+			p_role: role,
+			p_email: email,
+			p_phone: phone
 		});
+
 		if (error) {
 			users.update((arr) => arr.filter((u) => normUsername(u.username) !== username));
-			cloudError.set(error.message);
-			return { ok: false, reason: error.message };
+			const msg = String(error.message || '');
+			cloudError.set(msg);
+			if (/could not find the function|schema cache/i.test(msg)) {
+				return {
+					ok: false,
+					reason:
+						'Fungsi create_user belum ada di database. Jalankan scripts/fix-tambah-akun-langsung.sql di Supabase SQL Editor, lalu coba lagi.'
+				};
+			}
+			return { ok: false, reason: msg };
 		}
-		const newId = signUp?.user?.id;
-		if (newId) {
-			await supabase
-				.from('users')
-				.update({ name, role, email: email || '', phone, status: 'aktif' })
-				.eq('id', newId);
-		}
+
+		// Pastikan data di aplikasi langsung memakai baris dari database
 		await syncUsersFromCloud();
+		if (!newId) {
+			return { ok: false, reason: 'Akun gagal dibuat di database. Coba lagi.' };
+		}
 	}
 	return { ok: true };
 }
@@ -635,8 +646,16 @@ export async function registerAccount(data) {
 			options: { data: { username, name, phone } }
 		});
 		if (error) {
-			cloudError.set(error.message);
-			return { ok: false, reason: error.message };
+			const msg = String(error.message || '');
+			cloudError.set(msg);
+			if (/rate limit|too many requests/i.test(msg)) {
+				return {
+					ok: false,
+					reason:
+						'Kuota email konfirmasi Supabase sedang habis (batas bawaan hanya beberapa email per jam). Coba lagi nanti, atau minta pemilik toko membuatkan akun lewat menu Kelola Pengguna.'
+				};
+			}
+			return { ok: false, reason: msg };
 		}
 		const newId = signUp?.user?.id;
 		if (newId) {

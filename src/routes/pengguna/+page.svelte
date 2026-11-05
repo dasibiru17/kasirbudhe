@@ -8,7 +8,8 @@
 		resetPassword,
 		removeUser,
 		approveUser,
-		rejectUser
+		rejectUser,
+		syncUsersFromCloud
 	} from '$lib/stores/auth.js';
 
 	// Hanya pemilik yang boleh buka halaman ini (dijaga juga oleh layout)
@@ -48,8 +49,16 @@
 		e.preventDefault();
 		const res = await addUser(fu);
 		if (res.ok) {
-			notify('ok', `✅ Pengguna "${fu.username.trim().toLowerCase()}" berhasil ditambahkan.`);
+			// reason terisi = akun tersimpan tapi kredensial login belum dibuat
+			notify(
+				res.reason ? 'err' : 'ok',
+				res.reason
+					? `⚠️ Pengguna "${fu.username.trim().toLowerCase()}" tersimpan, tetapi: ${res.reason}`
+					: `✅ Pengguna "${fu.username.trim().toLowerCase()}" berhasil ditambahkan.`
+			);
 			fu = { username: '', name: '', role: 'kasir', email: '', phone: '', password: '' };
+			// Tarik ulang dari database agar baris baru langsung muncul di tabel
+			await syncUsersFromCloud();
 		} else {
 			notify('err', `⚠️ ${res.reason}`);
 		}
@@ -121,7 +130,7 @@
 {#if isOwner}
 	<section>
 		<h1 class="text-ink-800 text-2xl font-bold">Kelola Pengguna</h1>
-		<p class="text-ink-500 mt-1 text-sm">
+		<p class="mt-1 text-sm text-ink-500">
 			Tambah akun kasir/pemilik baru. Login bisa memakai <b>username</b>, <b>email</b>, atau
 			<b>no. HP</b>.
 		</p>
@@ -139,18 +148,18 @@
 
 		<!-- ============ SECTION PENGAWASAN: PERMOHONAN AKUN BARU ============ -->
 		{#if pendingUsers.length > 0}
-			<div class="border-warning-300 bg-warning-50/70 mt-6 rounded-2xl border-2 p-5 shadow-sm">
+			<div class="border-warning-300 mt-6 rounded-2xl border-2 bg-warning-50/70 p-5 shadow-sm">
 				<div class="flex items-center justify-between gap-3">
 					<div>
-						<h2 class="text-h3 text-warning-900 flex items-center gap-2">
+						<h2 class="text-warning-900 flex items-center gap-2 text-h3">
 							<span
-								class="bg-warning-500 grid h-6 w-6 place-items-center rounded-full text-xs font-bold text-white"
+								class="grid h-6 w-6 place-items-center rounded-full bg-warning-500 text-xs font-bold text-white"
 							>
 								{pendingUsers.length}
 							</span>
 							Permohonan Akun Baru (Menunggu Pengawasan)
 						</h2>
-						<p class="text-caption text-warning-700 mt-1">
+						<p class="mt-1 text-caption text-warning-700">
 							Pengguna berikut mendaftar secara mandiri melalui menu login dan memerlukan
 							persetujuan pemilik sebelum bisa masuk.
 						</p>
@@ -164,7 +173,7 @@
 						<li class="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
 							<div class="flex items-center gap-3">
 								<div
-									class="bg-warning-500 grid h-10 w-10 shrink-0 place-items-center rounded-full text-sm font-bold text-white"
+									class="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-warning-500 text-sm font-bold text-white"
 								>
 									{(pu.name || pu.username).trim().charAt(0).toUpperCase()}
 								</div>
@@ -172,7 +181,7 @@
 									<p class="text-ink-800 text-sm font-bold">
 										{pu.name}
 										<span
-											class="bg-warning-100 text-warning-800 ml-1 rounded-full px-2 py-0.5 text-[10px] font-bold"
+											class="text-warning-800 ml-1 rounded-full bg-warning-100 px-2 py-0.5 text-[10px] font-bold"
 										>
 											{pu.role === 'kasir' ? '🧾 Kasir' : '👑 Pemilik'}
 										</span>
@@ -182,7 +191,7 @@
 											⏳ Menunggu Persetujuan
 										</span>
 									</p>
-									<p class="text-caption mt-0.5 font-mono">
+									<p class="mt-0.5 font-mono text-caption">
 										@{pu.username}{pu.email ? ` · ✉️ ${pu.email}` : ''}{pu.phone
 											? ` · 📱 ${pu.phone}`
 											: ''}
@@ -193,7 +202,7 @@
 							<div class="flex items-center gap-2 self-end sm:self-auto">
 								<button
 									type="button"
-									class="btn-press bg-success-600 hover:bg-success-700 rounded-lg px-3.5 py-1.5 text-xs font-bold text-white transition-colors"
+									class="btn-press rounded-lg bg-success-600 px-3.5 py-1.5 text-xs font-bold text-white transition-colors hover:bg-success-700"
 									onclick={() => {
 										approveUser(pu.username);
 										notify('ok', `✅ Akun "${pu.username}" berhasil disetujui dan kini aktif!`);
@@ -203,7 +212,7 @@
 								</button>
 								<button
 									type="button"
-									class="border-danger-200 text-danger-600 hover:bg-danger-50 rounded-lg border px-3.5 py-1.5 text-xs font-semibold transition-colors"
+									class="border-danger-200 rounded-lg border px-3.5 py-1.5 text-xs font-semibold text-danger-600 transition-colors hover:bg-danger-50"
 									onclick={() => {
 										rejectUser(pu.username);
 										notify('err', `🚫 Permohonan akun "${pu.username}" ditolak.`);
@@ -213,7 +222,7 @@
 								</button>
 								<button
 									type="button"
-									class="border-line text-ink-400 hover:text-danger-600 rounded-lg border px-2.5 py-1.5 text-xs"
+									class="rounded-lg border border-line px-2.5 py-1.5 text-xs text-ink-400 hover:text-danger-600"
 									title="Hapus permohonan"
 									onclick={() => hapus(pu.username, pu.name)}
 								>
@@ -228,56 +237,56 @@
 
 		<div class="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-3">
 			<!-- ============ FORM TAMBAH ============ -->
-			<form class="card h-fit p-5" onsubmit={submitAdd}>
-				<h2 class="text-h3 mb-1">➕ Tambah Pengguna</h2>
-				<p class="text-caption mb-4">Isi data akun baru di bawah ini.</p>
+			<form class="h-fit card p-5" onsubmit={submitAdd}>
+				<h2 class="mb-1 text-h3">➕ Tambah Pengguna</h2>
+				<p class="mb-4 text-caption">Isi data akun baru di bawah ini.</p>
 
 				<div class="space-y-3">
 					<div>
 						<label
-							class="text-caption mb-1 block font-bold tracking-wide uppercase"
+							class="mb-1 block text-caption font-bold tracking-wide uppercase"
 							for="u-username">Username *</label
 						>
 						<input
 							id="u-username"
-							class="border-ink-300 bg-surface placeholder:text-ink-400 focus:border-brand-500 focus:ring-brand-100 w-full rounded-lg border px-3.5 py-2.5 text-sm outline-none focus:ring-2"
+							class="border-ink-300 bg-surface w-full rounded-lg border px-3.5 py-2.5 text-sm outline-none placeholder:text-ink-400 focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
 							placeholder="cth: kasir2"
 							bind:value={fu.username}
 						/>
 					</div>
 					<div>
-						<label class="text-caption mb-1 block font-bold tracking-wide uppercase" for="u-name"
+						<label class="mb-1 block text-caption font-bold tracking-wide uppercase" for="u-name"
 							>Nama Lengkap *</label
 						>
 						<input
 							id="u-name"
-							class="border-ink-300 bg-surface placeholder:text-ink-400 focus:border-brand-500 focus:ring-brand-100 w-full rounded-lg border px-3.5 py-2.5 text-sm outline-none focus:ring-2"
+							class="border-ink-300 bg-surface w-full rounded-lg border px-3.5 py-2.5 text-sm outline-none placeholder:text-ink-400 focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
 							placeholder="cth: Budi Kasir"
 							bind:value={fu.name}
 						/>
 					</div>
 					<div class="grid grid-cols-2 gap-3">
 						<div>
-							<label class="text-caption mb-1 block font-bold tracking-wide uppercase" for="u-email"
+							<label class="mb-1 block text-caption font-bold tracking-wide uppercase" for="u-email"
 								>Email</label
 							>
 							<input
 								id="u-email"
 								type="email"
-								class="border-ink-300 bg-surface placeholder:text-ink-400 focus:border-brand-500 focus:ring-brand-100 w-full rounded-lg border px-3.5 py-2.5 text-sm outline-none focus:ring-2"
+								class="border-ink-300 bg-surface w-full rounded-lg border px-3.5 py-2.5 text-sm outline-none placeholder:text-ink-400 focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
 								placeholder="nama@email.id"
 								bind:value={fu.email}
 							/>
 						</div>
 						<div>
-							<label class="text-caption mb-1 block font-bold tracking-wide uppercase" for="u-phone"
+							<label class="mb-1 block text-caption font-bold tracking-wide uppercase" for="u-phone"
 								>No. HP</label
 							>
 							<input
 								id="u-phone"
 								type="tel"
 								inputmode="tel"
-								class="border-ink-300 bg-surface placeholder:text-ink-400 focus:border-brand-500 focus:ring-brand-100 w-full rounded-lg border px-3.5 py-2.5 text-sm outline-none focus:ring-2"
+								class="border-ink-300 bg-surface w-full rounded-lg border px-3.5 py-2.5 text-sm outline-none placeholder:text-ink-400 focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
 								placeholder="08xx…"
 								bind:value={fu.phone}
 							/>
@@ -285,12 +294,12 @@
 					</div>
 					<div class="grid grid-cols-2 gap-3">
 						<div>
-							<label class="text-caption mb-1 block font-bold tracking-wide uppercase" for="u-role"
+							<label class="mb-1 block text-caption font-bold tracking-wide uppercase" for="u-role"
 								>Peran</label
 							>
 							<select
 								id="u-role"
-								class="border-ink-300 bg-surface focus:border-brand-500 w-full rounded-lg border px-3 py-2.5 text-sm outline-none"
+								class="border-ink-300 bg-surface w-full rounded-lg border px-3 py-2.5 text-sm outline-none focus:border-brand-500"
 								bind:value={fu.role}
 							>
 								<option value="kasir">🧾 Kasir</option>
@@ -298,26 +307,26 @@
 							</select>
 						</div>
 						<div>
-							<label class="text-caption mb-1 block font-bold tracking-wide uppercase" for="u-pass"
+							<label class="mb-1 block text-caption font-bold tracking-wide uppercase" for="u-pass"
 								>Password *</label
 							>
 							<input
 								id="u-pass"
 								type={showPw ? 'text' : 'password'}
 								minlength="6"
-								class="border-ink-300 bg-surface placeholder:text-ink-400 focus:border-brand-500 focus:ring-brand-100 w-full rounded-lg border px-3.5 py-2.5 text-sm outline-none focus:ring-2"
+								class="border-ink-300 bg-surface w-full rounded-lg border px-3.5 py-2.5 text-sm outline-none placeholder:text-ink-400 focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
 								placeholder="min. 6 karakter"
 								bind:value={fu.password}
 							/>
 						</div>
 					</div>
-					<label class="text-ink-500 flex cursor-pointer items-center gap-2 text-xs">
+					<label class="flex cursor-pointer items-center gap-2 text-xs text-ink-500">
 						<input type="checkbox" bind:checked={showPw} class="accent-brand-600" />
 						Tampilkan password
 					</label>
 					<button
 						type="submit"
-						class="btn-press bg-brand-600 w-full rounded-lg py-2.5 text-sm font-bold text-white"
+						class="w-full btn-press rounded-lg bg-brand-600 py-2.5 text-sm font-bold text-white"
 					>
 						+ Tambah Pengguna
 					</button>
@@ -326,13 +335,13 @@
 
 			<!-- ============ DAFTAR USER ============ -->
 			<div class="card p-5 lg:col-span-2">
-				<h2 class="text-h3 mb-1">👥 Daftar Pengguna ({$users.length})</h2>
-				<p class="text-caption mb-4">
+				<h2 class="mb-1 text-h3">👥 Daftar Pengguna ({$users.length})</h2>
+				<p class="mb-4 text-caption">
 					Klik ✏️ untuk edit · 🔑 untuk reset password · 🗑 untuk hapus. Akun
 					<span class="font-mono font-bold">admin</span> & akun yang sedang login tidak bisa dihapus.
 				</p>
 
-				<ul class="divide-line divide-y">
+				<ul class="divide-y divide-line">
 					{#each $users as u (u.username)}
 						{@const isMe = $session?.username === u.username}
 						<li class="py-3.5">
@@ -353,19 +362,19 @@
 										</span>
 										{#if isMe}
 											<span
-												class="bg-success-100 text-success-700 rounded-full px-2 py-0.5 text-[11px] font-bold"
+												class="rounded-full bg-success-100 px-2 py-0.5 text-[11px] font-bold text-success-700"
 												>● sedang login</span
 											>
 										{/if}
 										{#if u.status === 'ditolak'}
 											<span
-												class="bg-danger-100 text-danger-700 rounded-full px-2 py-0.5 text-[11px] font-bold"
+												class="rounded-full bg-danger-100 px-2 py-0.5 text-[11px] font-bold text-danger-700"
 											>
 												✕ ditolak
 											</span>
 										{/if}
 									</p>
-									<p class="text-caption mt-0.5 font-mono">
+									<p class="mt-0.5 font-mono text-caption">
 										@{u.username}{u.email ? ` · ✉️ ${u.email}` : ''}{u.phone
 											? ` · 📱 ${u.phone}`
 											: ''}
@@ -373,19 +382,19 @@
 								</div>
 								<div class="flex shrink-0 items-center gap-1.5">
 									<button
-										class="border-line hover:bg-surface-2 rounded-lg border px-2.5 py-1.5 text-xs"
+										class="rounded-lg border border-line px-2.5 py-1.5 text-xs hover:bg-surface-2"
 										title="Edit data"
 										aria-label="Edit {u.username}"
 										onclick={() => toggleEdit(u)}>✏️</button
 									>
 									<button
-										class="border-line hover:bg-surface-2 rounded-lg border px-2.5 py-1.5 text-xs"
+										class="rounded-lg border border-line px-2.5 py-1.5 text-xs hover:bg-surface-2"
 										title="Reset password"
 										aria-label="Reset password {u.username}"
 										onclick={() => togglePw(u.username)}>🔑</button
 									>
 									<button
-										class="border-danger-200 hover:bg-danger-50 rounded-lg border px-2.5 py-1.5 text-xs disabled:cursor-not-allowed disabled:opacity-40"
+										class="border-danger-200 rounded-lg border px-2.5 py-1.5 text-xs hover:bg-danger-50 disabled:cursor-not-allowed disabled:opacity-40"
 										title="Hapus pengguna"
 										aria-label="Hapus {u.username}"
 										disabled={u.username === 'admin' || isMe}
@@ -397,17 +406,17 @@
 							<!-- Panel edit -->
 							{#if editing === u.username}
 								<form
-									class="border-line bg-surface-alt mt-3 grid grid-cols-1 gap-2.5 rounded-xl border p-4 sm:grid-cols-2"
+									class="bg-surface-alt mt-3 grid grid-cols-1 gap-2.5 rounded-xl border border-line p-4 sm:grid-cols-2"
 									onsubmit={(e) => submitEdit(e, u.username)}
 									in:fly={{ y: -8, duration: 200 }}
 								>
 									<input
-										class="border-ink-300 bg-surface focus:border-brand-500 rounded-lg border px-3 py-2 text-sm outline-none"
+										class="border-ink-300 bg-surface rounded-lg border px-3 py-2 text-sm outline-none focus:border-brand-500"
 										placeholder="Nama lengkap"
 										bind:value={fe.name}
 									/>
 									<select
-										class="border-ink-300 bg-surface focus:border-brand-500 rounded-lg border px-3 py-2 text-sm outline-none"
+										class="border-ink-300 bg-surface rounded-lg border px-3 py-2 text-sm outline-none focus:border-brand-500"
 										bind:value={fe.role}
 									>
 										<option value="kasir">🧾 Kasir</option>
@@ -415,25 +424,25 @@
 									</select>
 									<input
 										type="email"
-										class="border-ink-300 bg-surface focus:border-brand-500 rounded-lg border px-3 py-2 text-sm outline-none"
+										class="border-ink-300 bg-surface rounded-lg border px-3 py-2 text-sm outline-none focus:border-brand-500"
 										placeholder="Email (opsional)"
 										bind:value={fe.email}
 									/>
 									<input
 										type="tel"
-										class="border-ink-300 bg-surface focus:border-brand-500 rounded-lg border px-3 py-2 text-sm outline-none"
+										class="border-ink-300 bg-surface rounded-lg border px-3 py-2 text-sm outline-none focus:border-brand-500"
 										placeholder="No. HP (opsional)"
 										bind:value={fe.phone}
 									/>
 									<div class="flex gap-2 sm:col-span-2">
 										<button
 											type="submit"
-											class="btn-press bg-success-600 flex-1 rounded-lg py-2 text-xs font-bold text-white"
+											class="flex-1 btn-press rounded-lg bg-success-600 py-2 text-xs font-bold text-white"
 											>💾 Simpan</button
 										>
 										<button
 											type="button"
-											class="border-line text-ink-600 hover:bg-surface-2 rounded-lg border px-4 py-2 text-xs font-semibold"
+											class="text-ink-600 rounded-lg border border-line px-4 py-2 text-xs font-semibold hover:bg-surface-2"
 											onclick={() => (editing = null)}>Batal</button
 										>
 									</div>
@@ -443,7 +452,7 @@
 							<!-- Panel reset password -->
 							{#if pwTarget === u.username}
 								<form
-									class="border-warning-200 bg-warning-50 mt-3 flex flex-col gap-2 rounded-xl border p-4 sm:flex-row"
+									class="border-warning-200 mt-3 flex flex-col gap-2 rounded-xl border bg-warning-50 p-4 sm:flex-row"
 									onsubmit={(e) => submitReset(e, u.username)}
 									in:fly={{ y: -8, duration: 200 }}
 								>
@@ -451,19 +460,19 @@
 										type="text"
 										minlength="6"
 										required
-										class="border-ink-300 bg-surface focus:border-brand-500 flex-1 rounded-lg border px-3 py-2 text-sm outline-none"
+										class="border-ink-300 bg-surface flex-1 rounded-lg border px-3 py-2 text-sm outline-none focus:border-brand-500"
 										placeholder="Password baru (min. 6 karakter)"
 										bind:value={pwBaru}
 									/>
 									<div class="flex gap-2">
 										<button
 											type="submit"
-											class="btn-press bg-warning-500 rounded-lg px-4 py-2 text-xs font-bold text-white"
+											class="btn-press rounded-lg bg-warning-500 px-4 py-2 text-xs font-bold text-white"
 											>🔑 Reset</button
 										>
 										<button
 											type="button"
-											class="border-line bg-surface text-ink-600 rounded-lg border px-4 py-2 text-xs font-semibold"
+											class="bg-surface text-ink-600 rounded-lg border border-line px-4 py-2 text-xs font-semibold"
 											onclick={() => (pwTarget = null)}>Batal</button
 										>
 									</div>
@@ -476,8 +485,8 @@
 		</div>
 	</section>
 {:else}
-	<p class="card text-ink-500 mt-6 p-8 text-center text-sm">
-		Halaman ini khusus pemilik toko. Silakan kembali ke <a class="text-brand-600 font-bold" href="/"
+	<p class="mt-6 card p-8 text-center text-sm text-ink-500">
+		Halaman ini khusus pemilik toko. Silakan kembali ke <a class="font-bold text-brand-600" href="/"
 			>Dashboard</a
 		>.
 	</p>
