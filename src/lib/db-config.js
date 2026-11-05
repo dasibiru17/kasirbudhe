@@ -4,14 +4,21 @@
 // Nilai diambil dari environment (Vercel / .env lokal). Jangan hardcode kunci di sini.
 // URL asli project saja (tanpa /rest/v1/ atau /auth/v1/) — path itu ditambahkan otomatis
 // oleh supabase-js. Kalau terlanjur ikut, dibersihkan agar login tidak error 404.
-const normalizeSupabaseUrl = (v) =>
+// Buang karakter tak terlihat (BOM U+FEFF, zero-width space, spasi/newline) yang
+// sering ikut tersalin saat menempel nilai ke .env atau dashboard Vercel.
+// Karakter ini membuat header apikey rusak dan semua request ditolak server.
+const cleanEnv = (v) =>
 	String(v ?? '')
-		.trim()
+		.replace(/[\uFEFF\u200B-\u200D\u00A0]/g, '')
+		.trim();
+
+const normalizeSupabaseUrl = (v) =>
+	cleanEnv(v)
 		.replace(/\/+$/, '')
 		.replace(/\/(rest|auth)\/v1$/, '');
 
 const supabaseUrl = normalizeSupabaseUrl(import.meta.env.VITE_SUPABASE_URL);
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+const supabaseAnonKey = cleanEnv(import.meta.env.VITE_SUPABASE_ANON_KEY);
 
 /**
  * Mode lokal (localhost / localStorage tanpa database eksternal) aktif secara default.
