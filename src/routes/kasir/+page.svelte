@@ -13,6 +13,7 @@
 	} from '$lib/stores/stores.js';
 	import NotaModal from '$lib/components/ui/NotaModal.svelte';
 	import AnimatedNumber from '$lib/components/ui/AnimatedNumber.svelte';
+	import { validateVoucher, redeemVoucher, unredeemVoucher } from '$lib/stores/game.js';
 
 	let search = $state('');
 	let showCheckout = $state(false);
@@ -25,6 +26,11 @@
 	let flashId = $state(null);
 	let kategoriAktif = $state('Semua');
 	let konfirmasiKosong = $state(false);
+
+	// ---- Kode promo dari game Spin & Win ----
+	let kodePromo = $state('');
+	let promo = $state(/** @type {null | { code:string, label:string, discount:number }} */ (null));
+	let promoError = $state('');
 
 	const filtered = $derived(
 		$products.filter(
@@ -41,7 +47,10 @@
 
 	const cartTotal = $derived($cart.reduce((acc, i) => acc + i.price * i.qty, 0));
 	const cartItems = $derived($cart.reduce((acc, i) => acc + i.qty, 0));
-	const change = $derived(paid - cartTotal);
+
+	/** Total setelah potongan voucher game (dasar pembayaran & kembalian). */
+	const grandTotal = $derived(Math.max(0, cartTotal - (promo?.discount ?? 0)));
+	const change = $derived(paid - grandTotal);
 
 	// Warna inisial produk — deterministik dari nama agar konsisten
 	const AVATAR_COLORS = [
@@ -66,7 +75,7 @@
 	}
 
 	const uangCepat = $derived.by(() => {
-		const base = Math.max(cartTotal, 0);
+		const base = Math.max(grandTotal, 0);
 		const list = [
 			base,
 			Math.ceil(base / 5000) * 5000,
@@ -102,14 +111,42 @@
 	}
 
 	function finishCheckout() {
-		if ($cart.length === 0 || paid < cartTotal) return;
+		if ($cart.length === 0 || paid < grandTotal) return;
 		const res = checkout(paid);
 		showCheckout = false;
 		paid = 0;
 		if (res.ok) {
+			// Catat pemakaian voucher game (setelah nota tersimpan)
+			if (promo) redeemVoucher(promo.code, res.tx.id);
+			resetPromo();
 			lastTx = res.tx;
 			showNota = true;
 		}
+	}
+
+	/** Validasi kode promo Spin & Win sebelum transaksi. */
+	function terapkanPromo() {
+		promoError = '';
+		const res = validateVoucher(kodePromo, cartTotal);
+		if (!res.ok) {
+			promo = null;
+			promoError = res.reason || 'Kode tidak valid.';
+			return;
+		}
+		promo = { code: res.voucher.code, label: res.voucher.label, discount: res.discount };
+		kodePromo = '';
+	}
+
+	function resetPromo() {
+		promo = null;
+		kodePromo = '';
+		promoError = '';
+	}
+
+	/** Batalkan pemakaian (bila transaksi batal / kode salah orang). */
+	function hapusPromo() {
+		if (promo) unredeemVoucher(promo.code);
+		resetPromo();
 	}
 
 	function kosongkan() {
@@ -526,7 +563,7 @@
 				class="group relative flex w-full btn-press items-center justify-center gap-2 overflow-hidden rounded-2xl bg-linear-to-r from-emerald-500 to-emerald-600 py-4 text-base font-black text-white shadow-xl shadow-emerald-600/30 transition-all hover:brightness-110 active:brightness-95 disabled:cursor-not-allowed disabled:opacity-30 disabled:shadow-none"
 				disabled={$cart.length === 0}
 				onclick={() => {
-					setPaid(cartTotal);
+					setPaid(grandTotal);
 					showCheckout = true;
 				}}
 			>
@@ -596,8 +633,13 @@
 							Konfirmasi Pembayaran
 						</p>
 						<p class="mt-1.5 text-3xl font-black tracking-tight text-white tabular-nums">
-							{formatRupiah(cartTotal)}
+							{formatRupiah(grandTotal)}
 						</p>
+						{#if promo}
+							<p class="text-[10px] font-bold text-emerald-400">
+								voucher {promo.code} · hemat {formatRupiah(promo.discount)}
+							</p>
+						{/if}
 						<p class="mt-0.5 text-[11px] font-medium text-white/50">
 							{cartItems} item · {$cart.length} jenis produk
 						</p>
@@ -610,6 +652,56 @@
 					>
 						✕
 					</button>
+				</div>
+
+				<!-- Kode promo dari game Spin & Win -->
+				<div class="mt-5 rounded-2xl border border-white/10 bg-white/5 p-3">
+					<div class="flex items-center justify-between gap-2">
+						<p class="text-[10px] font-black tracking-wide text-white/50 uppercase">
+							🎟️ Kode promo game
+						</p>
+						{#if promo}
+							<button
+								type="button"
+								class="text-danger-300 hover:text-danger-200 text-[10px] font-bold"
+								onclick={hapusPromo}>Batalkan</button
+							>
+						{/if}
+					</div>
+
+					{#if promo}
+						<div class="mt-1.5 flex items-center justify-between gap-2">
+							<div>
+								<p class="font-mono text-sm font-black tracking-widest text-emerald-300">
+									{promo.code}
+								</p>
+								<p class="text-[10px] text-white/50">{promo.label}</p>
+							</div>
+							<span class="text-sm font-black text-emerald-300 tabular-nums"
+								>-{formatRupiah(promo.discount)}</span
+							>
+						</div>
+					{:else}
+						<div class="mt-1.5 flex gap-1.5">
+							<input
+								type="text"
+								bind:value={kodePromo}
+								placeholder="SPN-XXXXXX"
+								autocomplete="off"
+								onkeydown={(e) => e.key === 'Enter' && terapkanPromo()}
+								class="min-w-0 flex-1 rounded-xl border border-white/15 bg-white/5 px-3 py-2 font-mono text-xs font-bold tracking-widest text-white uppercase placeholder:text-white/25 focus:border-brand-400 focus:outline-none"
+							/>
+							<button
+								type="button"
+								class="btn-press rounded-xl bg-white/10 px-3 py-2 text-[11px] font-black text-white hover:bg-white/20 disabled:opacity-40"
+								disabled={!kodePromo.trim()}
+								onclick={terapkanPromo}>Pakai</button
+							>
+						</div>
+						{#if promoError}
+							<p class="text-danger-300 mt-1.5 text-[10px] font-semibold">{promoError}</p>
+						{/if}
+					{/if}
 				</div>
 
 				<!-- Uang dibayar -->
@@ -693,7 +785,7 @@
 					<button
 						type="button"
 						class="flex-[2] btn-press rounded-2xl bg-linear-to-r from-emerald-500 to-emerald-600 py-3.5 text-sm font-black text-white shadow-lg shadow-emerald-600/30 transition-all hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-30 disabled:shadow-none"
-						disabled={$cart.length === 0 || paid < cartTotal}
+						disabled={$cart.length === 0 || paid < grandTotal}
 						onclick={finishCheckout}
 					>
 						✅ Selesaikan Transaksi

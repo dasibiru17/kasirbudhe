@@ -2,6 +2,7 @@
 	import { fly } from 'svelte/transition';
 	import { quintOut } from 'svelte/easing';
 	import { products, formatRupiah } from '$lib/stores/stores.js';
+	import { voucherStats } from '$lib/stores/game.js';
 
 	/**
 	 * Pusat Promo — membuat pesan promosi siap kirim lewat WhatsApp.
@@ -176,13 +177,21 @@
 				Susun pesan promo dari data produk toko, lalu kirim ke pelanggan lewat WhatsApp dalam
 				hitungan detik. Tanpa aplikasi tambahan, tanpa biaya iklan.
 			</p>
-			{#if stokMenipis.length > 0}
-				<div
-					class="mt-4 inline-flex items-center gap-2 rounded-full border border-white/25 bg-white/10 px-3 py-1.5 text-[11px] font-bold text-white backdrop-blur-sm"
+			<div class="mt-4 flex flex-wrap gap-2">
+				{#if stokMenipis.length > 0}
+					<div
+						class="inline-flex items-center gap-2 rounded-full border border-white/25 bg-white/10 px-3 py-1.5 text-[11px] font-bold text-white backdrop-blur-sm"
+					>
+						⚠️ {stokMenipis.length} produk stoknya menipis — saatnya promo cepat
+					</div>
+				{/if}
+				<a
+					href="/game"
+					class="inline-flex items-center gap-2 rounded-full border border-white/25 bg-white/10 px-3 py-1.5 text-[11px] font-bold text-white backdrop-blur-sm transition-colors hover:bg-white/20"
 				>
-					⚠️ {stokMenipis.length} produk stoknya menipis — saatnya promo cepat
-				</div>
-			{/if}
+					🎡 Game Spin & Win · {$voucherStats.total} voucher dibagikan
+				</a>
+			</div>
 		</div>
 	</div>
 
@@ -400,7 +409,7 @@
 
 			<!-- Tips -->
 			<div class="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
-				{#each [{ icon: '⏰', judul: 'Kirim di jam ramai', isi: 'Berdasarkan data penjualan, jam paling efektif untuk broadcast adalah sore menjelang tutup toko.' }, { icon: '🎯', judul: 'Fokus 3–5 produk', isi: 'Pesan dengan terlalu banyak produk membuat pelanggan malas membaca. Pilih yang marginnya paling besar.' }] as tip, i (tip.judul)}
+				{#each [{ icon: '⏰', judul: 'Kirim di jam ramai', isi: 'Berdasarkan data penjualan, jam paling efektif untuk broadcast adalah sore menjelang tutup toko.' }, { icon: '🎯', judul: 'Fokus 3–5 produk', isi: 'Pesan dengan terlalu banyak produk membuat pelanggan malas membaca. Pilih yang marginnya paling besar.' }, { icon: '🎡', judul: 'Game Spin & Win', isi: 'Ajak pelanggan memutar roda hadiah. Kode promo dari game bisa langsung ditukar di kasir, dan semua klaim tercatat otomatis.' }] as tip, i (tip.judul)}
 					<div
 						class="rounded-xl border border-[var(--color-line)] bg-[var(--color-surface-0)] p-3.5 transition-shadow hover:shadow-sm"
 						in:fly={{ y: 14, duration: 400, delay: 260 + i * 70, easing: quintOut }}
@@ -410,6 +419,13 @@
 							{tip.judul}
 						</p>
 						<p class="mt-1 text-[11px] leading-relaxed text-[var(--color-ink-400)]">{tip.isi}</p>
+						{#if tip.icon === '🎡'}
+							<a
+								href="/game"
+								class="mt-1.5 inline-block text-[11px] font-bold text-brand-600 hover:underline"
+								>Buka game →</a
+							>
+						{/if}
 					</div>
 				{/each}
 			</div>

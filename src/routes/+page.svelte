@@ -13,6 +13,8 @@
 	import HeroStat from '$lib/components/dashboard/HeroStat.svelte';
 	import HealthRing from '$lib/components/dashboard/HealthRing.svelte';
 	import LiveClock from '$lib/components/dashboard/LiveClock.svelte';
+	import TargetOmzet from '$lib/components/dashboard/TargetOmzet.svelte';
+	import JamRamai from '$lib/components/dashboard/JamRamai.svelte';
 	import Reveal from '$lib/components/ui/Reveal.svelte';
 	import AnimatedNumber from '$lib/components/ui/AnimatedNumber.svelte';
 
@@ -573,6 +575,12 @@
 						📚 Lihat panduan lengkap
 					</button>
 				</Reveal>
+			</div>
+
+			<!-- Target omzet + jam ramai (insight bisnis harian) -->
+			<div class="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
+				<TargetOmzet {omzetHariIni} jumlahTransaksi={penjualanHariIni.length} {labaHariIni} />
+				<JamRamai transactions={$transactions} />
 			</div>
 
 			<!-- Distribusi kategori + produk terlaris -->
